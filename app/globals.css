@@ -1,26 +1,109 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ── Design tokens — Moss & Vellum ───────────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg:            #F5F0E8;
+  --color-bg-warm:       #EDE8DF;
+  --color-surface:       #FFFFFF;
+  --color-surface-alt:   #F0EBE3;
+  --color-border:        #D4CFC6;
+  --color-border-hover:  #B8B0A4;
+  --color-border-active: #2C3A2E;
+  --color-text:          #2C2C2C;
+  --color-text-secondary:#6B6560;
+  --color-text-tertiary: #9E9890;
+  --color-sage:          #2C3A2E;
+  --color-sage-light:    #4A5E4C;
+  --color-sage-dim:      rgba(44,58,46,0.08);
+  --color-accent:        #8B7355;
+  --color-accent-text:   #FFFFFF;
+  --color-success:       #2C3A2E;
+  --color-error:         #C4564A;
+
+  /* Border radius tokens */
+  --radius-btn:   8px;
+  --radius-card:  14px;
+  --radius-cardSm:12px;
+  --radius-pill:  20px;
+
+  /* Fonts */
+  --font-marketing-heading: var(--font-yeseva);
+  --font-marketing-body:    var(--font-cormorant);
+  --font-dashboard:         var(--font-montserrat);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Light mode CSS variables (applied to :root) ────────────── */
+:root {
+  --bg:            #F5F0E8;
+  --bg-warm:       #EDE8DF;
+  --surface:       #FFFFFF;
+  --surface-alt:   #F0EBE3;
+  --border:        #D4CFC6;
+  --border-hover:  #B8B0A4;
+  --border-active: #2C3A2E;
+  --text:          #2C2C2C;
+  --text-secondary:#6B6560;
+  --text-tertiary: #9E9890;
+  --sage:          #2C3A2E;
+  --sage-light:    #4A5E4C;
+  --sage-dim:      rgba(44,58,46,0.08);
+  --accent:        #8B7355;
+  --accent-text:   #FFFFFF;
+  --success:       #2C3A2E;
+  --error:         #C4564A;
+  --blob1:         rgba(44,58,46,0.06);
+  --blob2:         rgba(139,115,85,0.05);
+  --blob3:         rgba(44,58,46,0.04);
+
+  --card-shadow: rgba(0,0,0,0.03) 0px 1px 3px,
+                 rgba(0,0,0,0.02) 0px 4px 12px,
+                 rgba(0,0,0,0.01) 0px 12px 36px;
 }
 
+/* ── Dark mode CSS variables ────────────────────────────────── */
+.dark {
+  --bg:            #1A1816;
+  --bg-warm:       #1E1C19;
+  --surface:       #242220;
+  --surface-alt:   #2A2826;
+  --border:        #3A3835;
+  --border-hover:  #4A4744;
+  --border-active: #6B9B6F;
+  --text:          #F2F0EC;
+  --text-secondary:#A09A93;
+  --text-tertiary: #6B6560;
+  --sage:          #6B9B6F;
+  --sage-light:    #8BB88F;
+  --sage-dim:      rgba(107,155,111,0.12);
+  --accent:        #C4A87A;
+  --accent-text:   #1A1816;
+  --success:       #6B9B6F;
+  --error:         #D4736A;
+  --blob1:         rgba(107,155,111,0.06);
+  --blob2:         rgba(196,168,122,0.04);
+  --blob3:         rgba(107,155,111,0.03);
+
+  --card-shadow: rgba(0,0,0,0.4) 0px 1px 3px,
+                 rgba(0,0,0,0.3) 0px 4px 12px;
+}
+
+/* ── Base styles ────────────────────────────────────────────── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-montserrat), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* ── Dashboard responsive layout ───────────────────────────── */
+@layer base {
+  @media (min-width: 768px) {
+    .dashboard-bottom-nav { display: none !important; }
+  }
+  @media (max-width: 767px) {
+    .dashboard-sidebar { display: none !important; }
+    .seating-grid { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 1099px) {
+    .dashboard-preview { display: none !important; }
+  }
 }

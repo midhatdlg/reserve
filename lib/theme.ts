@@ -1,0 +1,48 @@
+export const lightTokens = {
+  bg: '#F5F0E8',
+  bgWarm: '#EDE8DF',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F0EBE3',
+  border: '#D4CFC6',
+  borderHover: '#B8B0A4',
+  borderActive: '#2C3A2E',
+  text: '#2C2C2C',
+  textSecondary: '#6B6560',
+  textTertiary: '#9E9890',
+  sage: '#2C3A2E',
+  sageLight: '#4A5E4C',
+  sageDim: 'rgba(44,58,46,0.08)',
+  accent: '#8B7355',
+  accentText: '#FFFFFF',
+  success: '#2C3A2E',
+  error: '#C4564A',
+  blob1: 'rgba(44,58,46,0.06)',
+  blob2: 'rgba(139,115,85,0.05)',
+  blob3: 'rgba(44,58,46,0.04)',
+} as const;
+
+export const darkTokens = {
+  bg: '#1A1816',
+  bgWarm: '#1E1C19',
+  surface: '#242220',
+  surfaceAlt: '#2A2826',
+  border: '#3A3835',
+  borderHover: '#4A4744',
+  borderActive: '#6B9B6F',
+  text: '#F2F0EC',
+  textSecondary: '#A09A93',
+  textTertiary: '#6B6560',
+  sage: '#6B9B6F',
+  sageLight: '#8BB88F',
+  sageDim: 'rgba(107,155,111,0.12)',
+  accent: '#C4A87A',
+  accentText: '#1A1816',
+  success: '#6B9B6F',
+  error: '#D4736A',
+  blob1: 'rgba(107,155,111,0.06)',
+  blob2: 'rgba(196,168,122,0.04)',
+  blob3: 'rgba(107,155,111,0.03)',
+} as const;
+
+export type Theme = 'light' | 'dark';
+export type ThemeTokens = typeof lightTokens;

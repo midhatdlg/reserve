@@ -1,0 +1,3 @@
+ALTER TABLE rsvps
+  ADD COLUMN IF NOT EXISTS table_number INTEGER,
+  ADD COLUMN IF NOT EXISTS table_name TEXT;
