@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { Invite, Rsvp } from '@/types';
 import type { TemplateTheme } from '@/lib/template-theme';
 
@@ -60,7 +59,6 @@ const FALLBACK = {
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export function RsvpForm({ invite, existingRsvps, slug, mealOptions = [], theme: themeProp }: Props) {
-  const router = useRouter();
   const t = { ...FALLBACK, ...themeProp };
 
   const [slots, setSlots] = useState<GuestSlot[]>(() => makeSlots(invite, existingRsvps));
@@ -109,7 +107,7 @@ export function RsvpForm({ invite, existingRsvps, slug, mealOptions = [], theme:
       if (!res.ok) throw new Error(data.error ?? 'Submission failed');
 
       setStatus('success');
-      router.push(`/invite/${slug}`);
+      window.location.href = `/invite/${slug}`;
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong');
       setStatus('error');
@@ -154,7 +152,7 @@ export function RsvpForm({ invite, existingRsvps, slug, mealOptions = [], theme:
     textAlign: 'center',
   });
 
-  // ── Success (brief flash while router.refresh() loads) ──────────────
+  // ── Success (brief flash while page redirects) ──────────────
   if (status === 'success') {
     return (
       <div role="status" aria-live="polite" style={{ textAlign: 'center', padding: '36px 0' }}>

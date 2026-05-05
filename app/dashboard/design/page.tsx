@@ -47,7 +47,6 @@ export default async function DesignPage() {
     <div>
       <DesignEditor
         wedding={wedding}
-        slug={wedding.slug}
         events={eventsRes.data ?? []}
         photos={photosRes.data ?? []}
         questions={questionsRes.data ?? []}

@@ -417,7 +417,7 @@ export function GuestConfirmation({
 
             <div style={{ marginTop: anyAttending ? 28 : 0 }}>
               <a
-                href={`/invite/${encodeURIComponent(slug)}?edit=true`}
+                href={`/invite/${encodeURIComponent(slug)}/edit`}
                 style={{
                   fontFamily: t.displayFont,
                   fontStyle: 'italic',

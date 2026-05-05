@@ -141,7 +141,7 @@ export function CivilClassicInvite(props: Props) {
             invite={invite}
             rsvps={rsvps}
             slug={slug}
-            mealOptions={wedding.meal_options}
+            mealOptions={(wedding.settings as Record<string, unknown>)?.meal_selection_enabled === false ? [] : wedding.meal_options}
             showLookup={!invite && !wedding.save_the_date_mode}
           />
         )}

@@ -43,8 +43,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme((t) => (t === 'light' ? 'dark' : 'light'));
   }
 
-  // Prevent flash of wrong theme — render children immediately but apply
-  // class synchronously via the inline script in layout.tsx
+  // Theme class is applied after mount based on localStorage.
   return (
     <ThemeContext.Provider value={{ theme, toggle }}>
       {children}

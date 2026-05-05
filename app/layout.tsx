@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Bodoni_Moda, Cormorant_Garamond, Geist, Libre_Caslon_Text } from "next/font/google";
-import Script from "next/script";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import "./globals.css";
 
@@ -42,16 +41,6 @@ export const metadata: Metadata = {
     "Create beautiful digital wedding invitations with RSVP, seating, itinerary, and Q&A — all from one link. No app downloads, no guest logins.",
 };
 
-// Inline script prevents flash of wrong theme before React hydrates
-const themeScript = `
-(function() {
-  try {
-    var stored = localStorage.getItem('tll-theme-v2');
-    if (stored === 'dark') document.documentElement.classList.add('dark');
-  } catch(e) {}
-})();
-`;
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -65,7 +54,6 @@ export default function RootLayout({
     >
       <head />
       <body className="min-h-full flex flex-col">
-        <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeScript }} />
         <ThemeProvider>
           {children}
         </ThemeProvider>

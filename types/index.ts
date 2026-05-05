@@ -48,10 +48,17 @@ export interface ZoneOverride {
   fontColor?: string;
 }
 
+export interface HeroLayoutOverride {
+  textPosition?: 'top' | 'center' | 'bottom';
+  overlayOpacity?: number;
+  fadeInText?: boolean;
+}
+
 export type TemplateOverrides = {
   couple_names?: ZoneOverride;
   date?: ZoneOverride;
   venue?: ZoneOverride;
+  hero?: HeroLayoutOverride;
 };
 
 export interface Event {

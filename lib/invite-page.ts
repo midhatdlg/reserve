@@ -36,14 +36,29 @@ export async function loadInvitePageData(
   privilegedClient?: InvitePageClient
 ): Promise<InvitePageData | null> {
   const privileged = privilegedClient ?? client;
-  const weddingRes = await client
+
+  // Try the anon client first (respects RLS — only published weddings).
+  // If the guest has a valid session (inviteId + privilegedClient), fall back
+  // to the privileged client so unpublished weddings are still accessible
+  // for guests who already matched their name / are editing their RSVP.
+  let weddingRes = await client
     .from('weddings')
     .select('*')
     .eq('slug', slug)
     .maybeSingle();
 
-  const wedding = weddingRes.data as Wedding | null;
-  if (!wedding || !wedding.is_published) return null;
+  let wedding = weddingRes.data as Wedding | null;
+
+  if (!wedding && privilegedClient) {
+    weddingRes = await privilegedClient
+      .from('weddings')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
+    wedding = weddingRes.data as Wedding | null;
+  }
+
+  if (!wedding) return null;
 
   const invitePromise: Promise<Invite | null> = inviteId
     ? privileged
