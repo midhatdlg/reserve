@@ -9,7 +9,7 @@ export default async function DesignPage() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, title, wedding_date, venue_name, venue_address, venue_lat, venue_lng, template_id, invite_bg_color, template_overrides, template_content, selected_blocks, timezone')
+    .select('id, slug, title, wedding_date, venue_name, venue_address, venue_lat, venue_lng, template_id, invite_bg_color, template_overrides, template_content, selected_blocks, timezone, custom_design_url, design_zones')
     .eq('couple_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -47,6 +47,7 @@ export default async function DesignPage() {
     <div>
       <DesignEditor
         wedding={wedding}
+        slug={wedding.slug}
         events={eventsRes.data ?? []}
         photos={photosRes.data ?? []}
         questions={questionsRes.data ?? []}

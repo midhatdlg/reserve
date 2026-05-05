@@ -1,5 +1,6 @@
 import type { Wedding, Invite, DesignZone, TemplateOverrides, ZoneOverride } from '@/types';
 import { getTemplate } from '@/lib/templates';
+import { resolveZoneContent } from '@/lib/resolve-zone';
 
 interface Props {
   wedding: Wedding;
@@ -8,27 +9,6 @@ interface Props {
 
 const DESIGN_FONTS_URL =
   'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Montserrat:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Yeseva+One&display=swap';
-
-function resolveZoneContent(
-  content: string,
-  wedding: Wedding,
-  invite: Invite
-): string {
-  const [n1, n2] = (wedding.title ?? '').split(' & ');
-  const dateFmt = wedding.wedding_date
-    ? new Date(wedding.wedding_date + 'T12:00:00').toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : '';
-  return content
-    .replace(/\{\{name_1\}\}/g, n1?.trim() ?? '')
-    .replace(/\{\{name_2\}\}/g, n2?.trim() ?? '')
-    .replace(/\{\{wedding_date\}\}/g, dateFmt)
-    .replace(/\{\{venue_name\}\}/g, wedding.venue_name ?? '')
-    .replace(/\{\{guest_name\}\}/g, invite.guest_name || 'Guest');
-}
 
 // Numeric date: "Saturday, September 12, 2026"
 function formatDateNumeric(dateStr: string): string {
@@ -44,15 +24,14 @@ function formatDateNumeric(dateStr: string): string {
 /* Default font styles per template (must match DesignEditor's TEMPLATE_DEFAULTS) */
 const TMPL_DEFAULTS: Record<string, Record<string, ZoneOverride>> = {
   heritage:           { couple_names: { fontFamily: 'Cormorant Garamond', fontSize: 48, fontColor: '#2C2C2C' }, date: { fontFamily: 'Cormorant Garamond', fontSize: 15, fontColor: '#6B6560' }, venue: { fontFamily: 'Cormorant Garamond', fontSize: 12, fontColor: '#8B7355' } },
-  'beige-watercolor': { couple_names: { fontFamily: 'Cormorant Garamond', fontSize: 48, fontColor: '#5C4033' }, date: { fontFamily: 'Montserrat', fontSize: 13, fontColor: '#7A6B5D' }, venue: { fontFamily: 'Montserrat', fontSize: 12, fontColor: '#7A6B5D' } },
-  'minimal-serif':    { couple_names: { fontFamily: 'Playfair Display', fontSize: 56, fontColor: '#1A1A1A' }, date: { fontFamily: 'Montserrat', fontSize: 14, fontColor: '#666666' }, venue: { fontFamily: 'Montserrat', fontSize: 12, fontColor: '#666666' } },
-  'sage-garden':      { couple_names: { fontFamily: 'Cormorant Garamond', fontSize: 48, fontColor: '#2C3E2D' }, date: { fontFamily: 'Cormorant Garamond', fontSize: 40, fontColor: '#2C3E2D' }, venue: { fontFamily: 'Montserrat', fontSize: 11, fontColor: '#4A5D4B' } },
-  'midnight-gold':    { couple_names: { fontFamily: 'Cormorant Garamond', fontSize: 48, fontColor: '#C5A55A' }, date: { fontFamily: 'Montserrat', fontSize: 13, fontColor: '#D4C8A8' }, venue: { fontFamily: 'Montserrat', fontSize: 12, fontColor: '#D4C8A8' } },
+  'monochrome':       { couple_names: { fontFamily: 'NewYork', fontSize: 64, fontColor: '#000000' }, date: { fontFamily: 'Montserrat', fontSize: 11, fontColor: '#000000' }, venue: { fontFamily: 'Montserrat', fontSize: 11, fontColor: '#3A3A3A' } },
 };
 
-function resolveStyle(templateId: string, zone: string, overrides?: TemplateOverrides | null): Required<ZoneOverride> {
+type TextZoneKey = 'couple_names' | 'date' | 'venue';
+
+function resolveStyle(templateId: string, zone: TextZoneKey, overrides?: TemplateOverrides | null): Required<ZoneOverride> {
   const d = TMPL_DEFAULTS[templateId]?.[zone] ?? TMPL_DEFAULTS.heritage[zone];
-  const o = overrides?.[zone as keyof TemplateOverrides];
+  const o = overrides?.[zone];
   return {
     fontFamily: o?.fontFamily ?? d.fontFamily!,
     fontSize:   o?.fontSize   ?? d.fontSize!,
@@ -133,150 +112,6 @@ export function InviteHero({ wedding, invite }: Props) {
   const ns = resolveStyle(templateId, 'couple_names', ov);
   const ds = resolveStyle(templateId, 'date', ov);
   const vs = resolveStyle(templateId, 'venue', ov);
-
-  if (templateId === 'beige-watercolor') {
-    return (
-      <>
-        <link rel="stylesheet" href={ALL_FONTS_URL} />
-        <div style={{ aspectRatio: '5 / 7', background: '#EDE4D3', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 32px' }}>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: 0, fontWeight: 400, textTransform: 'uppercase', letterSpacing: '4px', lineHeight: 1.1, textAlign: 'center' }}>
-            {n1.toUpperCase()}
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize * 0.58, color: '#C4A882', margin: '8px 0', fontStyle: 'italic' }}>
-            &amp;
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: '0 0 32px', fontWeight: 400, textTransform: 'uppercase', letterSpacing: '4px', lineHeight: 1.1, textAlign: 'center' }}>
-            {n2.toUpperCase()}
-          </p>
-          <div style={{ width: 40, height: 1, background: '#C4A882', margin: '0 0 28px' }} />
-          {dateObj && (
-            <p style={{ fontFamily: `"${ds.fontFamily}", sans-serif`, fontSize: ds.fontSize, color: ds.fontColor, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '2px' }}>
-              {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            </p>
-          )}
-          {venue && (
-            <p style={{ fontFamily: `"${vs.fontFamily}", sans-serif`, fontSize: vs.fontSize, color: vs.fontColor, margin: '0 0 32px', letterSpacing: '1px' }}>
-              {venue}
-            </p>
-          )}
-          <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 14, color: '#A89B8C', margin: 0, fontStyle: 'italic' }}>
-            reception to follow
-          </p>
-        </div>
-      </>
-    );
-  }
-
-  if (templateId === 'minimal-serif') {
-    return (
-      <>
-        <link rel="stylesheet" href={ALL_FONTS_URL} />
-        <div style={{ aspectRatio: '5 / 7', background: '#FAFAFA', display: 'flex', flexDirection: 'column', padding: '48px 32px 32px', position: 'relative' }}>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: 0, fontWeight: 400, lineHeight: 0.95, letterSpacing: '3px' }}>
-            {n1.toUpperCase()}
-          </p>
-          <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: ns.fontSize * 0.46, color: ns.fontColor, margin: '4px 0 0 60px', fontStyle: 'italic', fontWeight: 400 }}>
-            and
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: '0 0 28px', fontWeight: 400, lineHeight: 0.95, letterSpacing: '3px' }}>
-            {n2.toUpperCase()}
-          </p>
-          <div style={{ width: 1, height: 36, background: '#1A1A1A', margin: '0 auto 28px' }} />
-          <div style={{ textAlign: 'center', marginTop: 'auto' }}>
-            <p style={{ fontFamily: `"${ds.fontFamily}", sans-serif`, fontSize: ds.fontSize * 0.85, color: ds.fontColor, margin: '0 0 6px' }}>
-              Invite you to their wedding on
-            </p>
-            {dateObj && (
-              <p style={{ fontFamily: `"${ds.fontFamily}", sans-serif`, fontSize: ds.fontSize, color: ds.fontColor, margin: '0 0 6px', fontWeight: 500 }}>
-                {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-              </p>
-            )}
-            {venue && (
-              <p style={{ fontFamily: `"${vs.fontFamily}", sans-serif`, fontSize: vs.fontSize, color: vs.fontColor, margin: 0 }}>
-                {venue}
-              </p>
-            )}
-          </div>
-          {dateObj && (
-            <div style={{ position: 'absolute', bottom: 24, left: 32 }}>
-              <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: 24, color: '#1A1A1A', margin: 0, fontWeight: 400, letterSpacing: '2px' }}>
-                {String(dateObj.getMonth() + 1).padStart(2, '0')}.{String(dateObj.getDate()).padStart(2, '0')}.{String(dateObj.getFullYear()).slice(2)}
-              </p>
-            </div>
-          )}
-          <div style={{ position: 'absolute', bottom: 24, right: 32, width: 50, borderTop: '1px solid #1A1A1A' }} />
-        </div>
-      </>
-    );
-  }
-
-  if (templateId === 'sage-garden') {
-    return (
-      <>
-        <link rel="stylesheet" href={ALL_FONTS_URL} />
-        <div style={{ aspectRatio: '5 / 7', background: '#DDE5D6', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '32px' }}>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: 0, fontWeight: 400, fontStyle: 'italic', lineHeight: 1.1 }}>
-            {n1}
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: '0 0 16px', fontWeight: 400, fontStyle: 'italic', lineHeight: 1.1 }}>
-            &amp; {n2}
-          </p>
-          <p style={{ fontFamily: 'Montserrat, sans-serif', fontSize: 11, color: '#4A5D4B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '2.5px', lineHeight: 1.6 }}>
-            Request your company<br />at their wedding
-          </p>
-          {dateObj && (
-            <p style={{ fontFamily: `"${ds.fontFamily}", serif`, fontSize: ds.fontSize, color: ds.fontColor, margin: '8px 0', fontWeight: 400 }}>
-              {String(dateObj.getMonth() + 1).padStart(2, '0')}.{String(dateObj.getDate()).padStart(2, '0')}.{dateObj.getFullYear()}
-            </p>
-          )}
-          {venue && (
-            <p style={{ fontFamily: `"${vs.fontFamily}", sans-serif`, fontSize: vs.fontSize, color: vs.fontColor, margin: '0 0 16px', textTransform: 'uppercase', letterSpacing: '2px', lineHeight: 1.6 }}>
-              {venue}
-            </p>
-          )}
-          <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 16, color: '#4A5D4B', margin: 0, fontStyle: 'italic' }}>
-            Reception to follow
-          </p>
-        </div>
-      </>
-    );
-  }
-
-  if (templateId === 'midnight-gold') {
-    return (
-      <>
-        <link rel="stylesheet" href={ALL_FONTS_URL} />
-        <div style={{ aspectRatio: '5 / 7', background: '#1E2A3A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 32px' }}>
-          <p style={{ fontFamily: 'Montserrat, sans-serif', fontSize: 10, color: '#D4C8A8', margin: '0 0 24px', textTransform: 'uppercase', letterSpacing: '4px' }}>
-            Together with their families
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: 0, fontWeight: 400, textTransform: 'uppercase', letterSpacing: '5px', lineHeight: 1.1, textAlign: 'center' }}>
-            {n1.toUpperCase()}
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize * 0.54, color: ns.fontColor, margin: '6px 0', fontStyle: 'italic' }}>
-            &amp;
-          </p>
-          <p style={{ fontFamily: `"${ns.fontFamily}", serif`, fontSize: ns.fontSize, color: ns.fontColor, margin: '0 0 24px', fontWeight: 400, textTransform: 'uppercase', letterSpacing: '5px', lineHeight: 1.1, textAlign: 'center' }}>
-            {n2.toUpperCase()}
-          </p>
-          <div style={{ width: 50, height: 1, background: '#C5A55A', margin: '0 0 24px' }} />
-          {dateObj && (
-            <p style={{ fontFamily: `"${ds.fontFamily}", sans-serif`, fontSize: ds.fontSize, color: ds.fontColor, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '2px' }}>
-              {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            </p>
-          )}
-          {venue && (
-            <p style={{ fontFamily: `"${vs.fontFamily}", sans-serif`, fontSize: vs.fontSize, color: vs.fontColor, margin: '0 0 24px', letterSpacing: '1px' }}>
-              {venue}
-            </p>
-          )}
-          <p style={{ fontFamily: 'Montserrat, sans-serif', fontSize: 10, color: '#8A7F6A', margin: 0, letterSpacing: '1.5px' }}>
-            Dinner &amp; Dancing to follow
-          </p>
-        </div>
-      </>
-    );
-  }
 
   // Video embed hero
   if (wedding.video_embed_url) {
