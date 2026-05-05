@@ -29,7 +29,11 @@ interface Props {
   weddingId: string;
   weddingSlug: string;
   initialInvites: Invite[];
+  initialMealOptions: string[];
+  initialMealEnabled: boolean;
 }
+
+type TabKey = 'guests' | 'meals';
 
 type SortOption = 'name-asc' | 'name-desc' | 'status' | 'created';
 type FilterVal = 'all' | 'responded' | 'pending' | 'declined';
@@ -42,7 +46,8 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 const STATUS_ORDER: Record<string, number> = { responded: 0, pending: 1, declined: 2 };
 
-export function GuestTable({ weddingId, weddingSlug, initialInvites }: Props) {
+export function GuestTable({ weddingId, weddingSlug, initialInvites, initialMealOptions, initialMealEnabled }: Props) {
+  const [activeTab, setActiveTab]   = useState<TabKey>('guests');
   const [invites, setInvites]       = useState<Invite[]>(initialInvites);
   const [search, setSearch]         = useState('');
   const [filter, setFilter]         = useState<FilterVal>('all');
@@ -262,6 +267,40 @@ export function GuestTable({ weddingId, weddingSlug, initialInvites }: Props) {
 
   return (
     <div>
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+        {([
+          { key: 'guests' as TabKey, label: 'Guest List' },
+          { key: 'meals' as TabKey, label: 'Meal Options' },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '10px 20px',
+              fontFamily: 'var(--font-montserrat)',
+              fontSize: 13,
+              fontWeight: activeTab === tab.key ? 600 : 400,
+              color: activeTab === tab.key ? 'var(--sage)' : 'var(--text-secondary)',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === tab.key ? '2px solid var(--sage)' : '2px solid transparent',
+              cursor: 'pointer',
+              marginBottom: -1,
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Meal Options tab */}
+      {activeTab === 'meals' && (
+        <MealOptionsPanel weddingId={weddingId} initialMealOptions={initialMealOptions} initialMealEnabled={initialMealEnabled} />
+      )}
+
+      {/* Guests tab */}
+      {activeTab === 'guests' && (<>
       {/* Summary strip */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
         {([
@@ -719,6 +758,8 @@ export function GuestTable({ weddingId, weddingSlug, initialInvites }: Props) {
         </div>
       )}
 
+      </>)}
+
       {/* ── Toast ────────────────────────────────────────────────────────────── */}
       {toast && (
         <div style={{
@@ -903,6 +944,191 @@ function GuestDetailPanel({ invite, appUrl, weddingSlug, isMobile, onSave, onDel
         </div>
       </div>
     </>
+  );
+}
+
+// ── Meal Options Panel ────────────────────────────────────────────────────────
+
+function MealOptionsPanel({ weddingId, initialMealOptions, initialMealEnabled }: { weddingId: string; initialMealOptions: string[]; initialMealEnabled: boolean }) {
+  const [options, setOptions] = useState<string[]>(initialMealOptions);
+  const [enabled, setEnabled] = useState(initialMealEnabled);
+  const [newOption, setNewOption] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const supabase = createClient();
+
+  const hasChanges = JSON.stringify(options) !== JSON.stringify(initialMealOptions) || enabled !== initialMealEnabled;
+
+  function addOption() {
+    const trimmed = newOption.trim();
+    if (!trimmed || options.includes(trimmed)) return;
+    setOptions((prev) => [...prev, trimmed]);
+    setNewOption('');
+  }
+
+  function removeOption(idx: number) {
+    setOptions((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    // Fetch current settings so we don't overwrite other keys
+    const { data: wedding } = await supabase
+      .from('weddings')
+      .select('settings')
+      .eq('id', weddingId)
+      .single();
+    const currentSettings = (wedding?.settings as Record<string, unknown>) ?? {};
+    const { error } = await supabase
+      .from('weddings')
+      .update({
+        meal_options: options,
+        settings: { ...currentSettings, meal_selection_enabled: enabled },
+      })
+      .eq('id', weddingId);
+    setSaving(false);
+    if (error) {
+      alert(`Save failed: ${error.message}`);
+      return;
+    }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      {/* Enable / disable toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 16px', borderRadius: 10, background: '#F7F7F5', marginBottom: 20,
+      }}>
+        <div>
+          <p style={{
+            fontFamily: 'var(--font-montserrat)', fontSize: 14, fontWeight: 600,
+            color: 'var(--text)', margin: 0,
+          }}>
+            Meal selection
+          </p>
+          <p style={{
+            fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)',
+            margin: '4px 0 0', lineHeight: 1.4,
+          }}>
+            {enabled
+              ? 'Guests choose a meal when they RSVP'
+              : 'Disabled — great for buffet-style receptions'}
+          </p>
+        </div>
+        <button
+          onClick={() => setEnabled((v) => !v)}
+          style={{
+            position: 'relative',
+            width: 44,
+            height: 24,
+            borderRadius: 12,
+            border: 'none',
+            background: enabled ? 'var(--sage)' : 'var(--border)',
+            cursor: 'pointer',
+            padding: 0,
+            flexShrink: 0,
+            transition: 'background 0.2s',
+          }}
+        >
+          <span style={{
+            position: 'absolute',
+            top: 2,
+            left: enabled ? 22 : 2,
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            background: '#FFF',
+            transition: 'left 0.2s',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+          }} />
+        </button>
+      </div>
+
+      <p style={{
+        fontFamily: 'var(--font-montserrat)', fontSize: 13, color: 'var(--text-secondary)',
+        margin: '0 0 20px', lineHeight: 1.5,
+        opacity: enabled ? 1 : 0.5,
+      }}>
+        Define the meal choices guests can pick from when they RSVP.
+      </p>
+
+      {/* Current options */}
+      <div style={{ opacity: enabled ? 1 : 0.4, pointerEvents: enabled ? 'auto' : 'none' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {options.map((opt, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 10, background: '#F7F7F5',
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-montserrat)', fontSize: 14, fontWeight: 500,
+                color: 'var(--text)', flex: 1,
+              }}>
+                {opt}
+              </span>
+              <button
+                onClick={() => removeOption(i)}
+                title="Remove option"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: 'var(--font-montserrat)', fontSize: 16,
+                  color: 'var(--text-tertiary)', padding: '0 4px', lineHeight: 1,
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          ))}
+          {options.length === 0 && (
+            <p style={{
+              fontFamily: 'var(--font-montserrat)', fontSize: 13,
+              color: 'var(--text-tertiary)', fontStyle: 'italic', margin: 0,
+              textAlign: 'center', padding: '20px 0',
+            }}>
+              No meal options yet
+            </p>
+          )}
+        </div>
+
+        {/* Add new option */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          <input
+            type="text"
+            value={newOption}
+            onChange={(e) => setNewOption(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addOption(); }}
+            placeholder="Add a meal option…"
+            style={{
+              flex: 1, padding: '10px 14px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--bg)',
+              fontFamily: 'var(--font-montserrat)', fontSize: 13, color: 'var(--text)',
+              outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+          <Button onClick={addOption} disabled={!newOption.trim()}>Add</Button>
+        </div>
+      </div>
+
+      {/* Save bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Button onClick={handleSave} disabled={saving || !hasChanges}>
+          {saving ? 'Saving…' : 'Save Changes'}
+        </Button>
+        {saved && (
+          <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--sage)' }}>
+            Saved
+          </span>
+        )}
+        {hasChanges && !saved && (
+          <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)' }}>
+            Unsaved changes
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

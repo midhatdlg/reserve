@@ -9,7 +9,7 @@ export default async function GuestsPage() {
 
   const { data: wedding } = await supabase
     .from('weddings')
-    .select('id, slug')
+    .select('id, slug, meal_options, settings')
     .eq('couple_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -33,7 +33,7 @@ export default async function GuestsPage() {
           Manage invite links and seat allocations
         </p>
       </div>
-      <GuestTable weddingId={wedding.id} weddingSlug={wedding.slug} initialInvites={invites ?? []} />
+      <GuestTable weddingId={wedding.id} weddingSlug={wedding.slug} initialInvites={invites ?? []} initialMealOptions={wedding.meal_options ?? ['Chicken', 'Fish', 'Vegetarian', 'Vegan']} initialMealEnabled={(wedding.settings as Record<string, unknown>)?.meal_selection_enabled !== false} />
     </div>
   );
 }
