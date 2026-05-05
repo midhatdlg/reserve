@@ -84,7 +84,7 @@ export function ItineraryTimeline({ events }: Props) {
             {/* Content */}
             <div style={{ flex: 1, paddingLeft: 12 }}>
               <p style={{
-                fontFamily: 'Playfair Display, Georgia, serif',
+                fontFamily: 'NewYork, Georgia, serif',
                 fontSize: 16,
                 color: '#1A1A1A',
                 margin: '0 0 3px',

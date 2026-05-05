@@ -38,7 +38,7 @@ export function TableReveal({ invite }: Props) {
           Table
         </p>
         <p style={{
-          fontFamily: 'Playfair Display, Georgia, serif',
+          fontFamily: 'NewYork, Georgia, serif',
           fontSize: 56,
           color: '#1A1A1A',
           margin: 0,
