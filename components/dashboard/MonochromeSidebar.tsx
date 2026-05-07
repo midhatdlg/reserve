@@ -46,6 +46,8 @@ interface Props {
   onPhotosChange: (photos: Photo[]) => void;
   content: TemplateContent;
   onContentChange: (patch: Partial<TemplateContent>) => void;
+  /** When `sage`, shows “line under names” in Hero Layout (saved in `hero_tagline`). */
+  templateId?: string;
   heroLayout: HeroLayoutOverride;
   onHeroLayoutChange: (patch: Partial<HeroLayoutOverride>) => void;
   heroFontSize: number;
@@ -58,11 +60,14 @@ export function MonochromeSidebar({
   onPhotosChange,
   content,
   onContentChange,
+  templateId = 'monochrome',
   heroLayout,
   onHeroLayoutChange,
   heroFontSize,
   onHeroFontSizeChange,
 }: Props) {
+  const isSageTemplate = templateId === 'sage';
+
   return (
     <>
       <SidebarSection label="Photos">
@@ -84,35 +89,58 @@ export function MonochromeSidebar({
 
       <SidebarSection label="Hero Layout">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <SidebarLabel>Names position</SidebarLabel>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {(['top', 'center', 'bottom'] as const).map((pos) => {
-                const active = (heroLayout.textPosition ?? 'top') === pos;
-                return (
-                  <button
-                    key={pos}
-                    onClick={() => onHeroLayoutChange({ textPosition: pos })}
-                    style={{
-                      flex: 1,
-                      padding: '6px 0',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      border: active ? '1px solid var(--sage)' : '1px solid var(--border)',
-                      background: active ? 'var(--sage)' : 'transparent',
-                      color: active ? 'white' : 'var(--text-secondary)',
-                      fontFamily: 'var(--font-montserrat)',
-                      fontSize: 11,
-                      fontWeight: 500,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {pos}
-                  </button>
-                );
-              })}
+          {isSageTemplate && (
+            <div>
+              <SidebarLabel>Line under names</SidebarLabel>
+              <textarea
+                value={content.hero_tagline ?? ''}
+                onChange={(e) => onContentChange({ hero_tagline: e.target.value })}
+                placeholder="Renewing our vows after 25 years"
+                rows={3}
+                style={textareaStyle}
+              />
+              <p style={{
+                fontFamily: 'var(--font-montserrat)',
+                fontSize: 10,
+                color: 'var(--text-tertiary)',
+                margin: '6px 0 0',
+                lineHeight: 1.45,
+              }}>
+                Script text directly under the couple names on the Sage hero. Line breaks are kept.
+              </p>
             </div>
-          </div>
+          )}
+          {!isSageTemplate && (
+            <div>
+              <SidebarLabel>Names position</SidebarLabel>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['top', 'center', 'bottom'] as const).map((pos) => {
+                  const active = (heroLayout.textPosition ?? 'top') === pos;
+                  return (
+                    <button
+                      key={pos}
+                      onClick={() => onHeroLayoutChange({ textPosition: pos })}
+                      style={{
+                        flex: 1,
+                        padding: '6px 0',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        border: active ? '1px solid var(--sage)' : '1px solid var(--border)',
+                        background: active ? 'var(--sage)' : 'transparent',
+                        color: active ? 'white' : 'var(--text-secondary)',
+                        fontFamily: 'var(--font-montserrat)',
+                        fontSize: 11,
+                        fontWeight: 500,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {pos}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div>
             <SidebarLabel>
               Overlay darkness — {Math.round((heroLayout.overlayOpacity ?? 0.6) * 100)}%
@@ -159,7 +187,9 @@ export function MonochromeSidebar({
               color: 'var(--text-secondary)',
               fontWeight: 500,
             }}>
-              Fade-in hero text (names, date, hashtag)
+              {isSageTemplate
+                ? 'Fade-in hero text (names, line under names)'
+                : 'Fade-in hero text (names, date, hashtag)'}
             </span>
           </label>
         </div>

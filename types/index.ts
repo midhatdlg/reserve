@@ -137,6 +137,8 @@ export interface TemplateContent {
   contact_email?: string;
   contact_phone?: string;
   hashtag?: string;
+  /** Sage hero — script line under couple names (e.g. “Renewing our vows after 25 years”) */
+  hero_tagline?: string;
 }
 
 export interface WeddingStats {

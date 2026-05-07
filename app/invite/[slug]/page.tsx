@@ -10,6 +10,8 @@ import { GuestConfirmation } from '@/components/invite/GuestConfirmation';
 import type { TemplateTheme } from '@/lib/template-theme';
 import { MonochromeInvite } from '@/components/invite/templates/monochrome/MonochromeInvite';
 import { theme as monochromeTheme } from '@/components/invite/templates/monochrome/shared';
+import { SageInvite } from '@/components/invite/templates/sage/SageInvite';
+import { theme as sageTheme } from '@/components/invite/templates/sage/shared';
 import type { Wedding, Event, Invite, Rsvp, Photo, Question } from '@/types';
 
 type TemplateEntry = {
@@ -23,6 +25,7 @@ type TemplateEntry = {
 const TEMPLATE_MAP: Record<string, TemplateEntry> = {
   'monochrome': { Component: MonochromeInvite, theme: monochromeTheme },
   'civil-classic': { Component: MonochromeInvite, theme: monochromeTheme },
+  'sage': { Component: SageInvite, theme: sageTheme },
 };
 
 export const revalidate = 60;

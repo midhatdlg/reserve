@@ -209,11 +209,11 @@ export function HeroSection({
             color: t.textOnDark,
             margin: 0,
             letterSpacing: '0.06em',
-            lineHeight: 1.05,
+            lineHeight: 1.15,
             display: 'flex',
             justifyContent: 'center',
             columnGap: '0.28em',
-            rowGap: '0.08em',
+            rowGap: '0.12em',
             textAlign: 'center',
           }}>
             <span style={{ textTransform: 'uppercase' }}>

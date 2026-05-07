@@ -7,34 +7,16 @@ import { readRsvpSession } from '@/lib/session';
 import { RsvpForm } from '@/components/invite/RsvpForm';
 import type { TemplateTheme } from '@/lib/template-theme';
 import { theme as monochromeTheme } from '@/components/invite/templates/monochrome/shared';
+import { theme as sageTheme } from '@/components/invite/templates/sage/shared';
 
 const TEMPLATE_THEME_MAP: Record<string, TemplateTheme> = {
   monochrome: monochromeTheme,
   'civil-classic': monochromeTheme,
+  sage: sageTheme,
 };
 
 const EDIT_FONTS_URL =
   'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Montserrat:wght@300;400;500;600&display=swap';
-
-function buildEditTheme(baseTheme: TemplateTheme): TemplateTheme {
-  return {
-    ...baseTheme,
-    pageBg: '#FFFFFF',
-    displayFont: '"Cormorant Garamond", Georgia, serif',
-    bodyFont: '"Montserrat", system-ui, sans-serif',
-    ink: '#1A1A1A',
-    ink2: '#4B4B4B',
-    ink3: '#8A8478',
-    rule: 'rgba(26,26,26,0.18)',
-    ruleSoft: 'rgba(26,26,26,0.10)',
-    primary: '#1A1A1A',
-    primaryMuted: 'rgba(26,26,26,0.18)',
-    primaryContrast: '#FFFFFF',
-    cardBg: '#FFFFFF',
-    border: 'rgba(26,26,26,0.10)',
-    surfaceTint: 'rgba(0,0,0,0.03)',
-  };
-}
 
 export const revalidate = 60;
 
@@ -67,13 +49,13 @@ export default async function InviteEditPage({ params }: Props) {
     redirect(returnPath);
   }
 
-  const baseTheme = TEMPLATE_THEME_MAP[wedding.template_id] ?? monochromeTheme;
-  const editTheme = buildEditTheme(baseTheme);
+  const editTheme = TEMPLATE_THEME_MAP[wedding.template_id] ?? monochromeTheme;
 
   return (
     <>
-      <link rel="stylesheet" href={EDIT_FONTS_URL} />
-      <div style={{ minHeight: '100svh', width: '100%', background: '#FFFFFF' }}>
+      <link rel="stylesheet" href={editTheme.fontsUrl ?? EDIT_FONTS_URL} />
+      {editTheme.fontFaceCSS && <style dangerouslySetInnerHTML={{ __html: editTheme.fontFaceCSS }} />}
+      <div style={{ minHeight: '100svh', width: '100%', background: editTheme.pageBg ?? '#FFFFFF' }}>
         <main
           style={{
             maxWidth: 520,

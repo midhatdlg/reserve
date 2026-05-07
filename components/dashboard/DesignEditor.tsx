@@ -4,11 +4,44 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { MonochromeSidebar } from './MonochromeSidebar';
 import { MonochromeInvite } from '@/components/invite/templates/monochrome/MonochromeInvite';
-import { BG_PAGE } from '@/components/invite/templates/monochrome/shared';
-import type { TemplateOverrides, TemplateContent, HeroLayoutOverride, Event, Photo, Question, Invite, Wedding } from '@/types';
+import { theme as monochromeTheme } from '@/components/invite/templates/monochrome/shared';
+import { SageInvite } from '@/components/invite/templates/sage/SageInvite';
+import { theme as sageTheme, SAGE_DEEP, CREAM_PAPER } from '@/components/invite/templates/sage/shared';
+import type { TemplateTheme } from '@/lib/template-theme';
+import type { TemplateOverrides, TemplateContent, HeroLayoutOverride, Event, Photo, Question, Invite, Rsvp, Wedding } from '@/types';
 
-/* ── Section definitions ─────────────────────────────────────────────── */
-const ALL_SECTIONS = [
+/* ── Template registry (rendered in the design editor preview) ─────────── */
+
+type EditorTemplateComponent = React.ComponentType<{
+  wedding: Wedding;
+  events: Event[];
+  invite: Invite | null;
+  rsvps: Rsvp[];
+  photos: Photo[];
+  questions: Question[];
+  slug: string;
+  showPlaceholders?: boolean;
+  previewHeroViewportFill?: boolean;
+}>;
+
+interface SectionDef {
+  key: string;
+  label: string;
+  locked?: boolean;
+}
+
+interface EditorTemplate {
+  id: string;
+  name: string;
+  description: string;
+  Component: EditorTemplateComponent;
+  theme: TemplateTheme;
+  /** Two-color swatch shown in the picker */
+  swatch: { primary: string; accent: string };
+  sections: SectionDef[];
+}
+
+const MONOCHROME_SECTIONS: SectionDef[] = [
   { key: 'story',     label: 'Our Love Story' },
   { key: 'ceremony',  label: 'The Ceremony' },
   { key: 'itinerary', label: 'Schedule of Events' },
@@ -18,6 +51,41 @@ const ALL_SECTIONS = [
   { key: 'footer',    label: 'Get In Touch',        locked: true },
   { key: 'countdown', label: 'Countdown' },
 ];
+
+const SAGE_SECTIONS: SectionDef[] = [
+  { key: 'story',     label: 'Our Love Story' },
+  { key: 'itinerary', label: 'Program' },
+  { key: 'qna',       label: 'FAQ' },
+  { key: 'rsvp',      label: 'RSVP',           locked: true },
+  { key: 'footer',    label: 'Get In Touch',   locked: true },
+];
+
+const EDITOR_TEMPLATES: EditorTemplate[] = [
+  {
+    id: 'monochrome',
+    name: 'Monochrome',
+    description: 'Editorial black & white on warm paper.',
+    Component: MonochromeInvite,
+    theme: monochromeTheme,
+    swatch: { primary: '#000000', accent: '#E8E6E2' },
+    sections: MONOCHROME_SECTIONS,
+  },
+  {
+    id: 'sage',
+    name: 'Sage',
+    description: 'Botanical sage green with cream accents.',
+    Component: SageInvite,
+    theme: sageTheme,
+    swatch: { primary: SAGE_DEEP, accent: CREAM_PAPER },
+    sections: SAGE_SECTIONS,
+  },
+];
+
+function resolveTemplate(id: string): EditorTemplate {
+  return EDITOR_TEMPLATES.find((t) => t.id === id) ?? EDITOR_TEMPLATES[0];
+}
+
+/* ── Section definitions are per-template (see EDITOR_TEMPLATES above) ── */
 
 type ViewMode = 'mobile' | 'desktop';
 
@@ -49,6 +117,13 @@ interface Props {
 
 /* ── Component ─────────────────────────────────────────────────────────── */
 export function DesignEditor({ wedding, events, photos: initialPhotos, questions, sampleInvite }: Props) {
+  const [templateId, setTemplateId] = useState<string>(
+    EDITOR_TEMPLATES.some((t) => t.id === wedding.template_id) ? wedding.template_id : 'monochrome',
+  );
+  const template = resolveTemplate(templateId);
+  const PreviewComponent = template.Component;
+  const previewBg = template.theme.pageBg;
+
   const [content, setContent] = useState<TemplateContent>(wedding.template_content ?? {});
   const [blocks, setBlocks] = useState<string[]>(
     wedding.selected_blocks ?? ['story', 'ceremony', 'itinerary', 'registry', 'qna', 'footer'],
@@ -91,6 +166,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
 
   /* Count unsaved changes */
   const changedFields: string[] = [];
+  if (templateId !== wedding.template_id) changedFields.push('template');
   if (JSON.stringify(overrides) !== JSON.stringify(wedding.template_overrides ?? {}))
     changedFields.push('overrides');
   if (JSON.stringify(content) !== JSON.stringify(wedding.template_content ?? {}))
@@ -104,6 +180,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
     const { error } = await supabase
       .from('weddings')
       .update({
+        template_id: templateId,
         template_overrides: overrides,
         template_content: content,
         selected_blocks: blocks,
@@ -118,7 +195,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
     setTimeout(() => setSaved(false), 2000);
   }
 
-  /* Build a full Wedding object for MonochromeInvite preview */
+  /* Build a full Wedding object for the preview */
   const previewWedding: Wedding = {
     id: wedding.id,
     couple_id: '',
@@ -129,7 +206,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
     venue_address: wedding.venue_address,
     venue_lat: wedding.venue_lat,
     venue_lng: wedding.venue_lng,
-    template_id: wedding.template_id,
+    template_id: templateId,
     custom_design_url: wedding.custom_design_url,
     video_embed_url: null,
     design_zones: [],
@@ -140,7 +217,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
     envelope_enabled: false,
     envelope_wax_color: '#000',
     envelope_initials: null,
-    invite_bg_color: wedding.invite_bg_color ?? BG_PAGE,
+    invite_bg_color: wedding.invite_bg_color ?? previewBg,
     meal_options: [],
     strict_name_match: false,
     timezone: wedding.timezone ?? 'UTC',
@@ -290,10 +367,69 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
           overflow: 'hidden',
         }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+            {/* TEMPLATE */}
+            <SidebarSection label="Template">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {EDITOR_TEMPLATES.map((opt) => {
+                  const active = opt.id === templateId;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => setTemplateId(opt.id)}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        padding: 10,
+                        borderRadius: 10,
+                        border: active ? '2px solid var(--sage)' : '1px solid var(--border)',
+                        background: active ? 'rgba(121,157,127,0.06)' : '#FFFFFF',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'border-color 0.15s, background 0.15s',
+                      }}
+                    >
+                      <div style={{
+                        height: 56,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                      }}>
+                        <div style={{ flex: 2, background: opt.swatch.primary }} />
+                        <div style={{ flex: 1, background: opt.swatch.accent }} />
+                      </div>
+                      <div>
+                        <p style={{
+                          fontFamily: 'var(--font-montserrat)',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          margin: 0,
+                          lineHeight: 1.2,
+                        }}>
+                          {opt.name}
+                        </p>
+                        <p style={{
+                          fontFamily: 'var(--font-montserrat)',
+                          fontSize: 10,
+                          color: 'var(--text-tertiary)',
+                          margin: '2px 0 0',
+                          lineHeight: 1.35,
+                        }}>
+                          {opt.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </SidebarSection>
+
             {/* SECTIONS */}
             <SidebarSection label="Sections">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {ALL_SECTIONS.map((s) => {
+                {template.sections.map((s) => {
                   const active = s.locked || blocks.includes(s.key);
                   return (
                     <label
@@ -355,6 +491,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
               onPhotosChange={setLivePhotos}
               content={content}
               onContentChange={updateContent}
+              templateId={templateId}
               heroLayout={heroLayout}
               onHeroLayoutChange={updateHeroLayout}
               heroFontSize={heroFontSize}
@@ -462,7 +599,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
               {/* Status bar */}
               <div style={{
                 height: 38,
-                background: BG_PAGE,
+                background: previewBg,
                 display: 'flex',
                 alignItems: 'flex-end',
                 justifyContent: 'space-between',
@@ -495,9 +632,9 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
                 flex: 1,
                 overflowY: 'auto',
                 scrollBehavior: 'smooth',
-                background: BG_PAGE,
+                background: previewBg,
               }}>
-                <MonochromeInvite
+                <PreviewComponent
                   wedding={previewWedding}
                   events={events}
                   invite={sampleInvite}
@@ -512,7 +649,7 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
 
               {/* Home indicator */}
               <div style={{
-                height: 22, background: BG_PAGE,
+                height: 22, background: previewBg,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>
                 <div style={{
@@ -558,9 +695,9 @@ export function DesignEditor({ wedding, events, photos: initialPhotos, questions
                 flex: 1,
                 overflowY: 'auto',
                 scrollBehavior: 'smooth',
-                background: BG_PAGE,
+                background: previewBg,
               }}>
-                <MonochromeInvite
+                <PreviewComponent
                   wedding={previewWedding}
                   events={events}
                   invite={sampleInvite}

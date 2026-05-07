@@ -1,8 +1,8 @@
 import type { Invite, Rsvp } from '@/types';
 import type { TemplateTheme } from '@/lib/template-theme';
 import { PAD_SECTION } from '@/lib/template-theme';
-import { RsvpForm } from '../RsvpForm';
-import { LookupGate } from '../LookupGate';
+import { RsvpForm } from '@/components/invite/RsvpForm';
+import { LookupGate } from '@/components/invite/LookupGate';
 
 interface Props {
   theme: TemplateTheme;
@@ -21,6 +21,7 @@ export function RsvpSection({ theme: t, invite, rsvps, slug, mealOptions, showLo
 
   return (
     <section
+      id="rsvp"
       style={{
         background: t.pageBg,
         padding: PAD_SECTION,

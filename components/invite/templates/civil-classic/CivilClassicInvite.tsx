@@ -1,15 +1,15 @@
 import type { Wedding, Event, Invite, Rsvp, Photo, Question } from '@/types';
 import { INVITE_ROOT_STYLE } from '@/lib/template-theme';
 import { theme, FONTS_URL, DISPLAY_FONT_FACE } from '../monochrome/shared';
-import { HeroSection } from '../../sections/HeroSection';
-import { LoveStorySection } from '../../sections/LoveStorySection';
-import { StoryCeremonyBridgeSection } from '../../sections/StoryCeremonyBridgeSection';
-import { CeremonySection } from '../../sections/CeremonySection';
-import { ScheduleSection } from '../../sections/ScheduleSection';
-import { GiftSection } from '../../sections/GiftSection';
-import { FaqSection } from '../../sections/FaqSection';
-import { FooterSection } from '../../sections/FooterSection';
-import { RsvpSection } from '../../sections/RsvpSection';
+import { HeroSection } from '../monochrome/sections/HeroSection';
+import { LoveStorySection } from '../monochrome/sections/LoveStorySection';
+import { StoryCeremonyBridgeSection } from '../monochrome/sections/StoryCeremonyBridgeSection';
+import { CeremonySection } from '../monochrome/sections/CeremonySection';
+import { ScheduleSection } from '../monochrome/sections/ScheduleSection';
+import { GiftSection } from '../monochrome/sections/GiftSection';
+import { FaqSection } from '../monochrome/sections/FaqSection';
+import { FooterSection } from '../monochrome/sections/FooterSection';
+import { RsvpSection } from '../monochrome/sections/RsvpSection';
 
 interface Props {
   wedding: Wedding;

@@ -392,7 +392,8 @@ export function RsvpForm({ invite, existingRsvps, slug, mealOptions = [], theme:
                   aria-labelledby={attGroupId}
                   style={{
                     display: 'flex',
-                    gap: 10,
+                    flexDirection: 'column',
+                    gap: 8,
                     marginBottom: slot.attending ? 20 : 0,
                   }}
                 >
@@ -411,8 +412,8 @@ export function RsvpForm({ invite, existingRsvps, slug, mealOptions = [], theme:
                         aria-checked={isSelected}
                         onClick={() => updateSlot(i, { attending: value })}
                         style={{
-                          flex: 1,
-                          padding: '12px 8px',
+                          width: '100%',
+                          padding: '10px 16px',
                           borderRadius: 32,
                           border: `1px solid ${
                             isSelected
