@@ -70,6 +70,11 @@ if (isLocal) {
   console.log('  Supabase Dashboard → Authentication → URL configuration → allow:');
   console.log('    http://localhost:3000/**');
   console.log('    http://localhost:3000/callback');
+  console.log('    https://YOUR_VERCEL_HOST/**');
+  console.log('    https://YOUR_VERCEL_HOST/callback');
+  console.log('');
+  console.log('  Vercel: set NEXT_PUBLIC_APP_URL to your HTTPS origin (no trailing slash).');
+  console.log('  Full production checklist: DEPLOY.md');
   console.log('');
   console.log('Then: npm run dev → /login → Continue with Google');
 } else {

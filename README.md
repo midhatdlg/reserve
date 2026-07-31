@@ -2,12 +2,14 @@
 
 Wedding invite + RSVP app. Auth is **Supabase + Google OAuth** (security-sensitive surface).
 
+**Deploying to Vercel?** Follow **[DEPLOY.md](DEPLOY.md)** (Supabase restore/create → migrations → Google redirect → Vercel env → verify `/login`).
+
 ## Prerequisites
 
 - **Node.js 20+**
 - Team access to the shared **hosted Supabase** project (URL + anon key + service role key)
 
-Docker / Supabase CLI are **not** required for the default path.
+Docker / Supabase CLI are **not** required for day-to-day local work. For a **new or restored** hosted project you need the CLI once to `supabase db push` (see [DEPLOY.md](DEPLOY.md)).
 
 ## Getting started
 
@@ -56,16 +58,18 @@ Do this once on the shared hosted project so every clone can use Google.
 3. **Supabase Dashboard** → Authentication → Providers → Google  
    Paste Client ID + Client Secret → enable
 4. **Supabase Dashboard** → Authentication → URL configuration  
-   Site URL can be production; add to redirect allow-list:
+   Site URL = production origin; add to redirect allow-list:
 
    ```
    http://localhost:3000/**
    http://localhost:3000/callback
+   https://YOUR_VERCEL_HOST/**
+   https://YOUR_VERCEL_HOST/callback
    ```
 
-   (plus your production origin)
-
 5. Share only the Supabase API keys with the team (vault). **Do not** commit Google client secrets or service role keys.
+
+Production launch (Vercel env vars, crons, keep-alive): **[DEPLOY.md](DEPLOY.md)**.
 
 `npm run env:check` prints the exact redirect URI for whatever `NEXT_PUBLIC_SUPABASE_URL` is in `.env.local`.
 

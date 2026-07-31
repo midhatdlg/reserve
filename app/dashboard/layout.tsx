@@ -40,15 +40,6 @@ function IconItinerary() {
     </svg>
   );
 }
-function IconSeating() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 4v5M12 15v5M4 12h5M15 12h5" />
-    </svg>
-  );
-}
 function IconPhotos() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -81,7 +72,6 @@ const ICON_MAP: Record<string, () => React.JSX.Element> = {
   Guests: IconGuests,
   Design: IconDesign,
   Itinerary: IconItinerary,
-  Seating: IconSeating,
   Photos: IconPhotos,
   'Q&A': IconQA,
   Settings: IconSettings,
@@ -92,7 +82,6 @@ const NAV_MAIN = [
   { href: '/dashboard/guests',    label: 'Guests' },
   { href: '/dashboard/design',    label: 'Design' },
   { href: '/dashboard/itinerary', label: 'Itinerary' },
-  { href: '/dashboard/seating',   label: 'Seating' },
   { href: '/dashboard/photos',    label: 'Photos' },
   { href: '/dashboard/questions', label: 'Q&A' },
 ];
