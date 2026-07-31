@@ -11,6 +11,7 @@ function LoginForm() {
   const next = searchParams.get('next') ?? '/dashboard';
 
   const [email, setEmail] = useState('');
+  const [formKey, setFormKey] = useState(0);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState(
     searchParams.get('error') === 'auth' ? 'Authentication failed. Please try again.' : ''
@@ -28,13 +29,17 @@ function LoginForm() {
 
   async function handleMagicLink(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email) return;
+    // Read from FormData so browser autofill works even when React state lags
+    const formEmail = new FormData(e.currentTarget).get('email');
+    const resolved = (typeof formEmail === 'string' ? formEmail : email).trim();
+    if (!resolved) return;
+    setEmail(resolved);
     setStatus('sending');
     setErrorMsg('');
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: resolved,
         options: {
           emailRedirectTo: `${window.location.origin}/callback?next=${next}`,
         },
@@ -45,7 +50,7 @@ function LoginForm() {
       } else {
         setStatus('sent');
       }
-    } catch (err) {
+    } catch {
       setErrorMsg('Unable to reach the server. Please check your connection and try again.');
       setStatus('error');
     }
@@ -76,7 +81,12 @@ function LoginForm() {
           </p>
         </div>
         <button
-          onClick={() => { setStatus('idle'); setEmail(''); }}
+          onClick={() => {
+            setStatus('idle');
+            setEmail('');
+            setErrorMsg('');
+            setFormKey((k) => k + 1);
+          }}
           style={{
             width: '100%', padding: '11px', borderRadius: 8,
             border: '1px solid var(--border)', background: 'var(--surface-alt)',
@@ -145,11 +155,13 @@ function LoginForm() {
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>EMAIL ADDRESS</label>
           <input
+            key={formKey}
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            name="email"
+            defaultValue=""
             placeholder="you@example.com"
             autoFocus
+            autoComplete="email"
             required
             style={inputStyle}
             onFocus={(e) => (e.target.style.borderColor = 'var(--border-active)')}
@@ -158,13 +170,13 @@ function LoginForm() {
         </div>
         <button
           type="submit"
-          disabled={status === 'sending' || !email}
+          disabled={status === 'sending'}
           style={{
             width: '100%', padding: '12px 16px', borderRadius: 8, border: 'none',
             background: 'var(--sage)', color: 'white',
             fontFamily: 'var(--font-montserrat)', fontSize: 13, fontWeight: 600,
-            letterSpacing: '0.5px', cursor: status === 'sending' || !email ? 'not-allowed' : 'pointer',
-            opacity: status === 'sending' || !email ? 0.6 : 1,
+            letterSpacing: '0.5px', cursor: status === 'sending' ? 'not-allowed' : 'pointer',
+            opacity: status === 'sending' ? 0.6 : 1,
           }}
         >
           {status === 'sending' ? 'Sending…' : 'Send me a sign-in link'}
