@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createSupabaseMock } from '@/test/helpers/supabase-mock';
-import { pickEventWindow } from './route';
+import { pickEventWindow } from '@/lib/pick-event-window';
 
 const mock = createSupabaseMock();
 

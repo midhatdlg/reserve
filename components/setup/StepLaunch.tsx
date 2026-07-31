@@ -8,7 +8,7 @@ import {
   DEFAULT_SELECTED_BLOCKS,
   sanitizeSlug,
   type WizardState,
-} from '@/app/setup/page';
+} from '@/lib/setup-wizard';
 
 interface Props {
   state: WizardState;
