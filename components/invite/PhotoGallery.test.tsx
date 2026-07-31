@@ -11,6 +11,7 @@ function makePhotos(n: number): Photo[] {
     image_url: `https://cdn/${i + 1}.jpg`,
     caption: i === 0 ? 'Our first dance' : null,
     sort_order: i,
+    role: null,
     created_at: new Date().toISOString(),
   }));
 }
