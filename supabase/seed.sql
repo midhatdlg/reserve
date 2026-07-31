@@ -33,15 +33,15 @@ VALUES (
   '2026-09-12',
   'The Old Barn',
   '1 High Street, Bath, UK',
-  'heritage',
+  'sage',
   ARRAY['countdown','rsvp','table','itinerary','qna','photos','map'],
   true,
   false,
   true,
   'A & B',
-  'Europe/London',
-  ARRAY['Beef','Fish','Vegetarian','Vegan'],
-  true
+    'Europe/London',
+    '["Beef","Fish","Vegetarian","Vegan"]'::jsonb,
+    true
 );
 
 INSERT INTO weddings (id, couple_id, slug, title, wedding_date, is_published, strict_name_match, timezone)

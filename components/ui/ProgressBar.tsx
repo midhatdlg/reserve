@@ -1,4 +1,4 @@
-const STEPS = ['Theme', 'Sections', 'Languages', 'Guests', 'Launch'];
+const STEPS = ['Details', 'Launch'];
 
 interface ProgressBarProps {
   currentStep: number; // 1-based
