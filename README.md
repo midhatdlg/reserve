@@ -1,4 +1,4 @@
-# Reserve (The Love List)
+# Reserve 
 
 Wedding invite + RSVP app. Auth is **Supabase + Google OAuth** (security-sensitive surface).
 
