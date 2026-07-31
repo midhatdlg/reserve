@@ -11,7 +11,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:ci": "npm run typecheck && npm run test"
+    "test:ci": "npm run typecheck && npm run test",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "env:check": "node scripts/check-env.mjs",
+    "env:from-local": "node scripts/setup-env.mjs",
+    "setup": "node scripts/setup.mjs",
+    "setup:local": "supabase start && node scripts/setup-env.mjs --force && supabase db reset"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",

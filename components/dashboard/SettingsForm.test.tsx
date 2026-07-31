@@ -46,6 +46,8 @@ function makeWedding(overrides: Partial<Wedding> = {}): Wedding {
     meal_options: ['Fish', 'Chicken'],
     strict_name_match: true,
     timezone: 'Europe/London',
+    template_overrides: {},
+    template_content: {},
     settings: {},
     created_at: new Date().toISOString(),
     ...overrides,
