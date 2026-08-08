@@ -19,6 +19,7 @@ interface Invite {
   max_guests: number;
   status: string;
   table_number: number | null;
+  group_name?: string | null;
   token: string;
   email: string | null;
   phone: string | null;
@@ -43,6 +44,9 @@ const STATUS_STYLE: Record<string, { dot: string; bg: string; color: string; lab
 };
 
 const STATUS_ORDER: Record<string, number> = { responded: 0, pending: 1, declined: 2 };
+
+/** Quick-pick group labels; any other string is allowed as a custom group. */
+const GROUP_PRESETS = ['Family', 'Friends', 'High school'] as const;
 
 type IconName = 'plus' | 'check' | 'x' | 'upload' | 'drag' | 'arrow' | 'search' | 'mail' | 'chev' | 'more' | 'trash' | 'edit' | 'link' | 'download' | 'send' | 'phone';
 
@@ -77,6 +81,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
   const [activeTab, setActiveTab]   = useState<TabKey>('guests');
   const [invites, setInvites]       = useState<Invite[]>(initialInvites);
   const [search, setSearch]         = useState('');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
   const [sort, setSort]             = useState<SortOption>('created');
   const [adding, setAdding]         = useState(false);
   const [newName, setNewName]       = useState('');
@@ -141,7 +146,21 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const filtered = invites.filter((inv) => inv.guest_name.toLowerCase().includes(search.toLowerCase()));
+  const groupNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const inv of invites) {
+      const g = inv.group_name?.trim();
+      if (g) names.add(g);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [invites]);
+
+  const filtered = invites.filter((inv) => {
+    if (!inv.guest_name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (groupFilter === 'all') return true;
+    if (groupFilter === '__none__') return !inv.group_name?.trim();
+    return (inv.group_name?.trim() ?? '') === groupFilter;
+  });
 
   const sorted = [...filtered].sort((a, b) => {
     if (sort === 'name-asc') return a.guest_name.localeCompare(b.guest_name);
@@ -203,8 +222,29 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     const lines = text.trim().split('\n');
 
     function splitCsv(row: string): string[] {
-      return row.match(/(".*?"|[^,]+)(?=,|$)/g)?.map((c) => c.replace(/^"|"$/g, '').trim())
-        ?? row.split(',').map((c) => c.trim());
+      const cols: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (row[i + 1] === '"') { cur += '"'; i++; }
+            else inQuotes = false;
+          } else {
+            cur += ch;
+          }
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          cols.push(cur.trim());
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      cols.push(cur.trim());
+      return cols;
     }
 
     const firstCols = splitCsv(lines[0]).map((c) => c.toLowerCase());
@@ -224,10 +264,11 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     const emailIdx = hasHeader ? findIdx('email') : 2;
     const phoneIdx = hasHeader ? findIdx('phone', 'mobile') : 3;
     const tableIdx = hasHeader ? findIdx('table') : 4;
+    const groupIdx = hasHeader ? findIdx('group', 'tag', 'side') : 5;
 
     const rows = hasHeader ? lines.slice(1) : lines;
 
-    const guests: { name: string; seats: number; email: string | null; phone: string | null; table: number | null }[] = [];
+    const guests: { name: string; seats: number; email: string | null; phone: string | null; table: number | null; group: string | null }[] = [];
     for (const row of rows) {
       const cols = splitCsv(row);
       const name = nameIdx >= 0 ? cols[nameIdx] : cols[0];
@@ -235,12 +276,14 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
       const seatsRaw = seatsIdx >= 0 ? cols[seatsIdx] : '';
       const tableRaw = tableIdx >= 0 ? cols[tableIdx] : '';
       const tableNum = tableRaw ? parseInt(tableRaw.replace(/[^0-9]/g, ''), 10) : NaN;
+      const groupRaw = groupIdx >= 0 ? (cols[groupIdx] || '').trim() : '';
       guests.push({
         name,
         seats: Math.min(Math.max(parseInt(seatsRaw) || 1, 1), 10),
         email: emailIdx >= 0 ? (cols[emailIdx] || null) : null,
         phone: phoneIdx >= 0 ? (cols[phoneIdx] || null) : null,
         table: Number.isFinite(tableNum) && tableNum > 0 ? tableNum : null,
+        group: groupRaw || null,
       });
     }
 
@@ -255,6 +298,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
           email: g.email,
           phone: g.phone,
           table_number: g.table,
+          group_name: g.group,
         })
         .select('*, rsvps(*)')
         .single();
@@ -266,12 +310,23 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
   }
 
   function downloadTemplate() {
+    // Notes column is ignored on import. Tip row has blank Guest Name (skipped).
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const row = (cols: string[]) => cols.map((c) => (c === '' ? '' : esc(c))).join(',');
     const csv = [
-      'Guest Name,Seats,Email,Phone,Table',
-      'The Johnson Family,4,johnson@email.com,07700 900001,1',
-      'Sarah & Tom,2,sarah@email.com,,2',
-      'Emily Davis,1,emily@email.com,07700 900002,',
-      'Uncle Bob + Guest,2,,07700 900003,3',
+      row(['Guest Name', 'Seats', 'Email', 'Phone', 'Table', 'Group', 'Notes (ignored on import)']),
+      row([
+        '', '', '', '', '', '',
+        'Fill one row per invite. Guest Name required. Seats = party size (1–10). Email/Phone optional. Table = optional table # (leave blank to Auto-seat). Group = Family, Friends, High school, or any custom name — same Group sits together. Replace the two example rows with your guests.',
+      ]),
+      row([
+        'The Johnson Family', '4', 'johnson@email.com', '07700 900001', '', 'Family',
+        'Example: household of 4 in Family group, no table yet',
+      ]),
+      row([
+        'Sarah & Tom', '2', 'sarah@email.com', '', '', 'Friends',
+        'Example: couple in Friends group — use any Group name you like',
+      ]),
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -280,6 +335,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     a.download = 'guest-list-template.csv';
     a.click();
     URL.revokeObjectURL(url);
+    showToast('Template downloaded — replace the two example rows with your guests');
   }
 
   async function saveInlineName(id: string) {
@@ -291,7 +347,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     if (detailInvite?.id === id) setDetailInvite((d) => d ? { ...d, guest_name: trimmed } : d);
   }
 
-  async function saveDetail(id: string, fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null }) {
+  async function saveDetail(id: string, fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null; group_name: string | null }) {
     await supabase.from('invites').update(fields).eq('id', id);
     setInvites((prev) => prev.map((inv) => inv.id === id ? { ...inv, ...fields } : inv));
     setDetailInvite(null);
@@ -562,7 +618,27 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
           <option value="name-desc">Name Z–A</option>
           <option value="status">Status</option>
         </select>
+        <select
+          value={groupFilter}
+          onChange={(e) => setGroupFilter(e.target.value)}
+          style={{
+            padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(212,207,198,0.7)',
+            background: '#FFFFFF', color: '#6B6560',
+            fontFamily: 'var(--font-montserrat)', fontSize: 12, outline: 'none',
+            cursor: 'pointer',
+            maxWidth: 180,
+          }}
+        >
+          <option value="all">All groups</option>
+          <option value="__none__">No group</option>
+          {groupNames.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </select>
         <button onClick={downloadTemplate} style={subtleBtn}>↓ Template</button>
+        <a href="/guest-list-200-test.csv" download="guest-list-200-test.csv" style={{ ...subtleBtn, textDecoration: 'none' }}>
+          ↓ Test list (200)
+        </a>
         <button onClick={() => { if (selected.size === 0) setSelected(new Set(sorted.map(i => i.id))); setSendModalOpen(true); }} style={subtleBtn}>
           <Icon name="send" size={11}/> Send Invites
         </button>
@@ -875,6 +951,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
       {detailInvite && (
         <GuestDetailPanel
           invite={detailInvite}
+          existingGroups={groupNames}
           appUrl={appUrl}
           weddingSlug={weddingSlug}
           isMobile={isMobile}
@@ -1205,6 +1282,7 @@ function GuestRowCard({
             <span style={{
               fontFamily: 'var(--font-montserrat)', fontSize: 10, color: '#9E9890',
             }}>
+              {invite.group_name?.trim() ? `${invite.group_name.trim()} · ` : ''}
               {attendingCount}/{invite.max_guests} attending
               {invite.email && ' · ✉'}
               {invite.phone && ' · ☎'}
@@ -1306,12 +1384,13 @@ const subtleBtn: React.CSSProperties = {
 
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
-function GuestDetailPanel({ invite, appUrl, weddingSlug, isMobile, onSave, onDelete, onCopyLink, onClose }: {
+function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobile, onSave, onDelete, onCopyLink, onClose }: {
   invite: Invite;
+  existingGroups: string[];
   appUrl: string;
   weddingSlug: string;
   isMobile: boolean;
-  onSave: (fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null }) => Promise<void>;
+  onSave: (fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null; group_name: string | null }) => Promise<void>;
   onDelete: () => void;
   onCopyLink: () => void;
   onClose: () => void;
@@ -1320,8 +1399,21 @@ function GuestDetailPanel({ invite, appUrl, weddingSlug, isMobile, onSave, onDel
   const [seats, setSeats] = useState(invite.max_guests);
   const [email, setEmail] = useState(invite.email ?? '');
   const [phone, setPhone] = useState(invite.phone ?? '');
+  const [group, setGroup] = useState(invite.group_name ?? '');
   const [saving, setSaving] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+
+  const groupSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const g of [...GROUP_PRESETS, ...existingGroups]) {
+      const key = g.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(g.trim());
+    }
+    return out;
+  }, [existingGroups]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1344,7 +1436,13 @@ function GuestDetailPanel({ invite, appUrl, weddingSlug, isMobile, onSave, onDel
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({ guest_name: name.trim(), max_guests: seats, email: email || null, phone: phone || null });
+    await onSave({
+      guest_name: name.trim(),
+      max_guests: seats,
+      email: email || null,
+      phone: phone || null,
+      group_name: group.trim() || null,
+    });
     setSaving(false);
   }
 
@@ -1381,6 +1479,44 @@ function GuestDetailPanel({ invite, appUrl, weddingSlug, isMobile, onSave, onDel
                 <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 16, fontWeight: 600, color: '#2C2C2C', minWidth: 24, textAlign: 'center' }}>{seats}</span>
                 <button onClick={() => setSeats(Math.min(10, seats + 1))} style={stepBtn}>+</button>
               </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8 }}>
+                GROUP
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {groupSuggestions.map((g) => {
+                  const selected = group.trim().toLowerCase() === g.toLowerCase();
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGroup(selected ? '' : g)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        border: selected ? '1px solid #2C3A2E' : '1px solid rgba(212,207,198,0.7)',
+                        background: selected ? 'rgba(44,58,46,0.10)' : '#FFFFFF',
+                        color: selected ? '#2C3A2E' : '#6B6560',
+                        fontFamily: 'var(--font-montserrat)',
+                        fontSize: 12,
+                        fontWeight: selected ? 600 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {g}
+                    </button>
+                  );
+                })}
+              </div>
+              <Input
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                placeholder="Or type a custom group name…"
+              />
+              <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 11, color: '#9E9890', margin: '6px 0 0' }}>
+                Guests with the same group are seated together by Auto-seat.
+              </p>
             </div>
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" />
             <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />

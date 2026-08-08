@@ -82,6 +82,7 @@ export interface Invite {
   max_guests: number;
   table_number: number | null;
   table_name: string | null;
+  group_name: string | null;
   email: string | null;
   phone: string | null;
   status: InviteStatus;

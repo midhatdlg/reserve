@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { autoSeatByGroup } from '@/lib/seating/auto-seat';
 
 interface Invite {
   id: string;
@@ -9,6 +10,7 @@ interface Invite {
   max_guests: number;
   table_number: number | null;
   table_name: string | null;
+  group_name?: string | null;
   status: string;
 }
 
@@ -29,6 +31,7 @@ type SeatItem = {
   name: string;
   seats: 1;
   tableNumber: number | null;
+  groupName: string | null;
 } | {
   kind: 'invite';
   id: string;           // invite.id
@@ -36,6 +39,7 @@ type SeatItem = {
   name: string;
   seats: number;
   tableNumber: number | null;
+  groupName: string | null;
 };
 
 interface Props {
@@ -65,6 +69,8 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
   });
   const [dragOver, setDragOver] = useState<number | 'unassigned' | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null); // SeatItem.id
+  const [autoSeating, setAutoSeating] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const dragItemId = useRef<string | null>(null);
   const supabase = createClient();
 
@@ -88,6 +94,7 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
           name: r.person_name,
           seats: 1,
           tableNumber: r.table_number,
+          groupName: inv.group_name ?? null,
         });
       }
     } else {
@@ -99,6 +106,7 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
         name: inv.guest_name,
         seats: inv.max_guests,
         tableNumber: inv.table_number,
+        groupName: inv.group_name ?? null,
       });
     }
   }
@@ -129,6 +137,72 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
       );
       await supabase.from('invites').update({ table_number: tableNum }).eq('id', itemId);
     }
+  }
+
+  async function handleAutoSeat() {
+    if (autoSeating) return;
+    const unseated = seatItems.filter((s) => s.tableNumber == null);
+    if (unseated.length === 0) {
+      setToast('All guests are already seated');
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
+
+    setAutoSeating(true);
+    const result = autoSeatByGroup(
+      seatItems.map((s) => ({
+        id: s.id,
+        seats: s.seats,
+        tableNumber: s.tableNumber,
+        groupName: s.groupName,
+      })),
+      tableCount,
+      tableCapacity,
+    );
+
+    if (result.assignments.size === 0) {
+      setToast('No free seats left for unseated guests');
+      setAutoSeating(false);
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
+
+    const personIds: string[] = [];
+    const inviteIds: string[] = [];
+    const nextRsvps = rsvps.map((r) => {
+      const table = result.assignments.get(r.id);
+      if (table == null) return r;
+      personIds.push(r.id);
+      return { ...r, table_number: table };
+    });
+    const nextInvites = invites.map((inv) => {
+      const table = result.assignments.get(inv.id);
+      if (table == null) return inv;
+      inviteIds.push(inv.id);
+      return { ...inv, table_number: table };
+    });
+
+    setRsvps(nextRsvps);
+    setInvites(nextInvites);
+
+    await Promise.all([
+      ...personIds.map((id) =>
+        supabase.from('rsvps').update({ table_number: result.assignments.get(id)! }).eq('id', id)
+      ),
+      ...inviteIds.map((id) =>
+        supabase.from('invites').update({ table_number: result.assignments.get(id)! }).eq('id', id)
+      ),
+    ]);
+
+    const splitNote = result.groupsSplit > 0
+      ? ` · ${result.groupsSplit} group${result.groupsSplit === 1 ? '' : 's'} split`
+      : '';
+    const unplacedNote = result.unplacedIds.length > 0
+      ? ` · ${result.unplacedIds.length} left unseated`
+      : '';
+    setToast(`Seated ${result.seatedSeats} guest${result.seatedSeats === 1 ? '' : 's'}${splitNote}${unplacedNote}`);
+    setAutoSeating(false);
+    setTimeout(() => setToast(null), 3500);
   }
 
   async function updateTableName(tableNum: number, name: string) {
@@ -239,7 +313,37 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
         <div style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)' }}>
           {tableCount * tableCapacity} total venue seats
         </div>
+        <button
+          type="button"
+          onClick={handleAutoSeat}
+          disabled={autoSeating}
+          style={{
+            marginLeft: 'auto',
+            padding: '10px 16px',
+            borderRadius: 10,
+            border: '1px solid var(--sage)',
+            background: 'var(--sage)',
+            color: '#fff',
+            fontFamily: 'var(--font-montserrat)',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: autoSeating ? 'wait' : 'pointer',
+            opacity: autoSeating ? 0.7 : 1,
+          }}
+        >
+          {autoSeating ? 'Seating…' : 'Auto-seat by group'}
+        </button>
       </div>
+
+      {toast && (
+        <div style={{
+          background: 'var(--sage-dim)', border: '1px solid var(--sage)',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+          fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--sage)', fontWeight: 600,
+        }}>
+          {toast}
+        </div>
+      )}
 
       {/* Tap-to-assign hint */}
       {selectedName && (
@@ -377,6 +481,7 @@ function SeatChip({ item, onDragStart, onTap, isSelected }: {
   isSelected: boolean;
 }) {
   const isPerson = item.kind === 'person';
+  const groupLabel = item.groupName?.trim() || null;
 
   return (
     <div
@@ -392,21 +497,32 @@ function SeatChip({ item, onDragStart, onTap, isSelected }: {
         transition: 'all 0.15s',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        {isPerson && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {isPerson && (
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: 'var(--sage)', opacity: 0.6,
+            }} />
+          )}
           <span style={{
-            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-            background: 'var(--sage)', opacity: 0.6,
-          }} />
+            fontFamily: 'var(--font-montserrat)', fontSize: 12,
+            color: isSelected ? 'var(--sage)' : 'var(--text)',
+            fontWeight: isSelected ? 600 : 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {item.name}
+          </span>
+        </div>
+        {groupLabel && (
+          <span style={{
+            fontFamily: 'var(--font-montserrat)', fontSize: 10, color: 'var(--text-tertiary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            paddingLeft: isPerson ? 12 : 0,
+          }}>
+            {groupLabel}
+          </span>
         )}
-        <span style={{
-          fontFamily: 'var(--font-montserrat)', fontSize: 12,
-          color: isSelected ? 'var(--sage)' : 'var(--text)',
-          fontWeight: isSelected ? 600 : 500,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {item.name}
-        </span>
       </div>
       <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 6, flexShrink: 0 }}>
         {isPerson ? '' : `×${item.seats}`}
