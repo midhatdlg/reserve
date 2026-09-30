@@ -2,7 +2,12 @@
 
 import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { autoSeatByGroup } from '@/lib/seating/auto-seat';
+import {
+  autoSeatByGroup,
+  planVenueSections,
+  sectionForTable,
+  type GuestSide,
+} from '@/lib/seating/auto-seat';
 
 interface Invite {
   id: string;
@@ -11,6 +16,7 @@ interface Invite {
   table_number: number | null;
   table_name: string | null;
   group_name?: string | null;
+  side?: GuestSide | null;
   status: string;
 }
 
@@ -32,6 +38,7 @@ type SeatItem = {
   seats: 1;
   tableNumber: number | null;
   groupName: string | null;
+  side: GuestSide | null;
 } | {
   kind: 'invite';
   id: string;           // invite.id
@@ -40,6 +47,7 @@ type SeatItem = {
   seats: number;
   tableNumber: number | null;
   groupName: string | null;
+  side: GuestSide | null;
 };
 
 interface Props {
@@ -95,6 +103,7 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
           seats: 1,
           tableNumber: r.table_number,
           groupName: inv.group_name ?? null,
+          side: inv.side ?? null,
         });
       }
     } else {
@@ -107,12 +116,24 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
         seats: inv.max_guests,
         tableNumber: inv.table_number,
         groupName: inv.group_name ?? null,
+        side: inv.side ?? null,
       });
     }
   }
 
   const tables = Array.from({ length: tableCount }, (_, i) => i + 1);
   const unassigned = seatItems.filter((s) => s.tableNumber == null);
+  const venueSections = planVenueSections(
+    seatItems.map((s) => ({
+      id: s.id,
+      seats: s.seats,
+      tableNumber: s.tableNumber,
+      groupName: s.groupName,
+      side: s.side,
+    })),
+    tableCount,
+    tableCapacity,
+  );
 
   function itemsAtTable(n: number) {
     return seatItems.filter((s) => s.tableNumber === n);
@@ -155,6 +176,7 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
         seats: s.seats,
         tableNumber: s.tableNumber,
         groupName: s.groupName,
+        side: s.side,
       })),
       tableCount,
       tableCapacity,
@@ -310,8 +332,11 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
           <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 15, fontWeight: 600, color: 'var(--text)', minWidth: 20, textAlign: 'center' }}>{tableCapacity}</span>
           <button onClick={() => setTableCapacity((n) => n + 1)} style={stepBtn}>+</button>
         </div>
-        <div style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)' }}>
+        <div style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 280, lineHeight: 1.4 }}>
           {tableCount * tableCapacity} total venue seats
+          <div style={{ marginTop: 4, fontSize: 11 }}>
+            Venue splits into Bride & Groom sections; groups sit together within each. Drag to fine-tune.
+          </div>
         </div>
         <button
           type="button"
@@ -395,6 +420,16 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
             const isNearFull = !isFull && available <= 2;
             const isOver = dragOver === tableNum;
             const capacityColor = isFull ? '#C62828' : isNearFull ? '#B8860B' : 'var(--sage)';
+            const section = sectionForTable(tableNum, venueSections);
+            const tableGroups = [...new Set(
+              items
+                .map((item) => item.groupName?.trim())
+                .filter((g): g is string => Boolean(g)),
+            )].sort((a, b) => a.localeCompare(b));
+            const tableTags = [
+              ...(section ? [section === 'bride' ? 'Bride section' : 'Groom section'] : []),
+              ...tableGroups,
+            ];
 
             return (
               <div
@@ -409,6 +444,7 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
                   borderRadius: 12, padding: '14px', minHeight: 120,
                   transition: 'all 0.15s',
                   cursor: selectedItem ? 'pointer' : 'default',
+                  opacity: section ? 1 : 1,
                 }}
               >
                 {/* Table header */}
@@ -435,6 +471,28 @@ export function SeatingChart({ weddingId, initialInvites, initialRsvps = [] }: P
                     }}
                   />
                 </div>
+
+                {tableTags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                    {tableTags.map((tag) => {
+                      const isSide = tag === 'Bride' || tag === 'Groom';
+                      return (
+                        <span
+                          key={tag}
+                          style={{
+                            fontFamily: 'var(--font-montserrat)', fontSize: 10, fontWeight: 600,
+                            color: isSide ? 'var(--sage)' : 'var(--text-secondary)',
+                            background: 'var(--sage-dim)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6, padding: '2px 8px',
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Capacity bar */}
                 <div style={{ marginBottom: 10 }}>
@@ -481,7 +539,9 @@ function SeatChip({ item, onDragStart, onTap, isSelected }: {
   isSelected: boolean;
 }) {
   const isPerson = item.kind === 'person';
+  const sideLabel = item.side === 'bride' ? 'Bride' : item.side === 'groom' ? 'Groom' : null;
   const groupLabel = item.groupName?.trim() || null;
+  const meta = [sideLabel, groupLabel].filter(Boolean).join(' · ');
 
   return (
     <div
@@ -514,13 +574,13 @@ function SeatChip({ item, onDragStart, onTap, isSelected }: {
             {item.name}
           </span>
         </div>
-        {groupLabel && (
+        {meta && (
           <span style={{
             fontFamily: 'var(--font-montserrat)', fontSize: 10, color: 'var(--text-tertiary)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             paddingLeft: isPerson ? 12 : 0,
           }}>
-            {groupLabel}
+            {meta}
           </span>
         )}
       </div>

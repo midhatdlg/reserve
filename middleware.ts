@@ -2,6 +2,20 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  // Supabase falls back to Site URL (/) when redirectTo isn't allow-listed.
+  // Forward auth params to /callback so the client PKCE/OTP exchange can run.
+  const { pathname, searchParams } = request.nextUrl;
+  if (
+    pathname !== '/callback' &&
+    (searchParams.has('code') ||
+      (searchParams.has('token_hash') && searchParams.has('type')))
+  ) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = '/callback';
+    // Absolute URL avoids broken redirects behind some hosts / browsers.
+    return NextResponse.redirect(callbackUrl);
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

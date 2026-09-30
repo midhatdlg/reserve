@@ -83,6 +83,8 @@ export interface Invite {
   table_number: number | null;
   table_name: string | null;
   group_name: string | null;
+  /** Wedding-party side — every guest should be bride or groom. */
+  side: 'bride' | 'groom' | null;
   email: string | null;
   phone: string | null;
   status: InviteStatus;

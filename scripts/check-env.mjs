@@ -67,16 +67,19 @@ if (isLocal) {
   console.log('  Google Cloud → OAuth Web client → Authorized redirect URI:');
   console.log(`    https://${projectRef}.supabase.co/auth/v1/callback`);
   console.log('  Supabase Dashboard → Authentication → Providers → Google → enabled');
-  console.log('  Supabase Dashboard → Authentication → URL configuration → allow:');
+  console.log('  Supabase Dashboard → Authentication → URL configuration:');
+  console.log('    Site URL = https://reserve-guest.vercel.app');
+  console.log('    Redirect URLs allow:');
   console.log('    http://localhost:3000/**');
   console.log('    http://localhost:3000/callback');
-  console.log('    https://YOUR_VERCEL_HOST/**');
-  console.log('    https://YOUR_VERCEL_HOST/callback');
+  console.log('    https://reserve-guest.vercel.app/**');
+  console.log('    https://reserve-guest.vercel.app/callback');
   console.log('');
-  console.log('  Vercel: set NEXT_PUBLIC_APP_URL to your HTTPS origin (no trailing slash).');
+  console.log('  Vercel: NEXT_PUBLIC_APP_URL=https://reserve-guest.vercel.app (no trailing slash).');
+  console.log('  Sign in at: https://reserve-guest.vercel.app/login');
   console.log('  Full production checklist: DEPLOY.md');
   console.log('');
-  console.log('Then: npm run dev → /login → Continue with Google');
+  console.log('Then open the Vercel /login page → Continue with Google');
 } else {
   console.log('Supabase URL looks non-standard:', url);
 }

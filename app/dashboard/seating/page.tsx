@@ -20,7 +20,7 @@ export default async function SeatingPage() {
   const [{ data: invites }, { data: rsvps }] = await Promise.all([
     supabase
       .from('invites')
-      .select('id, guest_name, max_guests, table_number, table_name, group_name, status')
+      .select('id, guest_name, max_guests, table_number, table_name, group_name, side, status')
       .eq('wedding_id', wedding.id)
       .order('guest_name'),
     supabase

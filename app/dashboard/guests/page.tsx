@@ -23,13 +23,21 @@ export default async function GuestsPage() {
     .eq('wedding_id', wedding.id)
     .order('created_at');
 
+  const settings = (wedding.settings as Record<string, unknown>) ?? {};
+  const togetherSets = Array.isArray(settings.auto_seat_together_sets)
+    ? (settings.auto_seat_together_sets as unknown[]).filter(
+      (set): set is string[] => Array.isArray(set) && set.every((g) => typeof g === 'string'),
+    )
+    : [];
+
   return (
     <GuestTableV2
       weddingId={wedding.id}
       weddingSlug={wedding.slug}
       initialInvites={invites ?? []}
       initialMealOptions={wedding.meal_options ?? ['Chicken', 'Fish', 'Vegetarian', 'Vegan']}
-      initialMealEnabled={(wedding.settings as Record<string, unknown>)?.meal_selection_enabled !== false}
+      initialMealEnabled={settings.meal_selection_enabled !== false}
+      initialTogetherSets={togetherSets}
     />
   );
 }

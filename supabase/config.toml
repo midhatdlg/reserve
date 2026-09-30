@@ -146,9 +146,15 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://localhost:3000"
+# Hosted Supabase Site URL should be the Vercel app (Dashboard → Auth → URL Configuration).
+# This local value only applies to `supabase start`.
+site_url = "https://reserve-guest.vercel.app"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
+# Hosted project must also allow these (wildcards in config.toml do not update the cloud project).
 additional_redirect_urls = [
+  "https://reserve-guest.vercel.app",
+  "https://reserve-guest.vercel.app/callback",
+  "https://reserve-guest.vercel.app/**",
   "http://localhost:3000/callback",
   "http://127.0.0.1:3000/callback",
   "http://localhost:3000/**",
@@ -323,12 +329,12 @@ email_optional = false
 # Then restart with `npm run db:stop && npm run db:start`.
 # Without these env vars, Magic Link via Inbucket is the day-1 login path.
 [auth.external.google]
-enabled = false
-client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+enabled = true
+client_id = "611417461593-etv8mjksi35r5raia868fbc7iiqk43h3.apps.googleusercontent.com"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 redirect_uri = ""
 url = ""
-skip_nonce_check = true
+skip_nonce_check = false
 email_optional = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.

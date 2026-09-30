@@ -1,35 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { BlobBackground } from '@/components/marketing/BlobBackground';
-import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') ?? '/dashboard';
 
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [formKey, setFormKey] = useState(0);
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState(
-    searchParams.get('error') === 'auth' ? 'Authentication failed. Please try again.' : ''
-  );
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState(() => {
+    if (searchParams.get('error') !== 'auth') return '';
+    const reason = searchParams.get('reason');
+    return reason
+      ? `Authentication failed: ${reason}`
+      : 'Authentication failed. Please try again.';
+  });
+  const isLocalSupabase =
+    typeof process.env.NEXT_PUBLIC_SUPABASE_URL === 'string' &&
+    /127\.0\.0\.1|localhost/.test(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+  // Callback on the same host that started login (PKCE cookie is host-bound).
+  // Use https://reserve-guest.vercel.app/login in production — not localhost.
+  const authRedirectTo = `${window.location.origin}/callback`;
 
   async function handleGoogle() {
+    setErrorMsg('');
     const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/callback?next=${next}`,
+        redirectTo: authRedirectTo,
+        skipBrowserRedirect: true,
       },
     });
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    if (data.url) window.location.assign(data.url);
   }
 
-  async function handleMagicLink(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSendOtp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // Read from FormData so browser autofill works even when React state lags
     const formEmail = new FormData(e.currentTarget).get('email');
     const resolved = (typeof formEmail === 'string' ? formEmail : email).trim();
     if (!resolved) return;
@@ -41,7 +58,10 @@ function LoginForm() {
       const { error } = await supabase.auth.signInWithOtp({
         email: resolved,
         options: {
-          emailRedirectTo: `${window.location.origin}/callback?next=${next}`,
+          shouldCreateUser: true,
+          // Prefer OTP code entry in-app (avoids email-client link prefetch killing the token).
+          // Keep redirect for templates that still render a link.
+          emailRedirectTo: authRedirectTo,
         },
       });
       if (error) {
@@ -49,6 +69,7 @@ function LoginForm() {
         setStatus('error');
       } else {
         setStatus('sent');
+        setOtp('');
       }
     } catch {
       setErrorMsg('Unable to reach the server. Please check your connection and try again.');
@@ -56,39 +77,139 @@ function LoginForm() {
     }
   }
 
-  // ── Success state ────────────────────────────────────────────────────────────
-  if (status === 'sent') {
+  async function handleVerifyOtp(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const token = otp.replace(/\s/g, '');
+    if (!email || token.length < 6) return;
+    setStatus('verifying');
+    setErrorMsg('');
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'email',
+      });
+      if (error) {
+        setErrorMsg(error.message);
+        setStatus('sent');
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setErrorMsg('Signed in, but no user was returned. Please try again.');
+        setStatus('sent');
+        return;
+      }
+
+      const { data: wedding } = await supabase
+        .from('weddings')
+        .select('id')
+        .eq('couple_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      router.replace(wedding ? '/dashboard' : '/setup');
+    } catch {
+      setErrorMsg('Unable to verify that code. Please try again.');
+      setStatus('sent');
+    }
+  }
+
+  // ── OTP entry ────────────────────────────────────────────────────────────────
+  if (status === 'sent' || status === 'verifying') {
     return (
       <div style={cardStyle}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <h1 style={{ fontFamily: 'var(--font-yeseva)', fontSize: 28, color: 'var(--sage)', margin: '0 0 8px' }}>
             Reserve
           </h1>
         </div>
-        <div style={{ textAlign: 'center', padding: '8px 0 24px' }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>✉</div>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: '0 0 8px' }}>
             Check your email
           </p>
           <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 4px' }}>
-            We sent a sign-in link to
+            We sent a sign-in email to
           </p>
-          <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 13, fontWeight: 600, color: 'var(--sage)', margin: '0 0 20px' }}>
+          <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 13, fontWeight: 600, color: 'var(--sage)', margin: '0 0 12px' }}>
             {email}
           </p>
-          <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>
-            Click the link to sign in. Expires in 1 hour.
+          <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+            {isLocalSupabase ? (
+              <>
+                Open{' '}
+                <a href="http://127.0.0.1:54324" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--sage)' }}>
+                  Inbucket
+                </a>
+                , copy the 6-digit code (or click the link on this same computer).
+              </>
+            ) : (
+              'Enter the 6-digit code from the email. If you only see a link, open it on this same computer.'
+            )}
           </p>
         </div>
+
+        {errorMsg && (
+          <div style={{
+            background: 'rgba(196,86,74,0.08)', border: '1px solid var(--error)',
+            borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+            fontSize: 13, color: 'var(--error)', fontFamily: 'var(--font-montserrat)',
+          }}>
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleVerifyOtp}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>ONE-TIME CODE</label>
+            <input
+              type="text"
+              name="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={8}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/[^\d]/g, '').slice(0, 8))}
+              placeholder="123456"
+              autoFocus
+              required
+              style={{ ...inputStyle, letterSpacing: '0.35em', fontWeight: 600, textAlign: 'center' }}
+              onFocus={(e) => (e.target.style.borderColor = 'var(--border-active)')}
+              onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={status === 'verifying' || otp.replace(/\s/g, '').length < 6}
+            style={{
+              width: '100%', padding: '12px 16px', borderRadius: 8, border: 'none',
+              background: 'var(--sage)', color: 'white',
+              fontFamily: 'var(--font-montserrat)', fontSize: 13, fontWeight: 600,
+              letterSpacing: '0.5px',
+              cursor: status === 'verifying' ? 'not-allowed' : 'pointer',
+              opacity: status === 'verifying' || otp.replace(/\s/g, '').length < 6 ? 0.6 : 1,
+            }}
+          >
+            {status === 'verifying' ? 'Verifying…' : 'Verify and continue'}
+          </button>
+        </form>
+
         <button
           onClick={() => {
             setStatus('idle');
             setEmail('');
+            setOtp('');
             setErrorMsg('');
             setFormKey((k) => k + 1);
           }}
           style={{
-            width: '100%', padding: '11px', borderRadius: 8,
+            width: '100%', padding: '11px', borderRadius: 8, marginTop: 12,
             border: '1px solid var(--border)', background: 'var(--surface-alt)',
             fontFamily: 'var(--font-montserrat)', fontSize: 12, fontWeight: 600,
             color: 'var(--text-secondary)', cursor: 'pointer', letterSpacing: '0.3px',
@@ -103,7 +224,6 @@ function LoginForm() {
   // ── Default state ─────────────────────────────────────────────────────────────
   return (
     <div style={cardStyle}>
-      {/* Logo */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'var(--font-yeseva)', fontSize: 28, color: 'var(--sage)', margin: '0 0 6px' }}>
           Reserve
@@ -113,7 +233,6 @@ function LoginForm() {
         </p>
       </div>
 
-      {/* Error */}
       {errorMsg && (
         <div style={{
           background: 'rgba(196,86,74,0.08)', border: '1px solid var(--error)',
@@ -124,11 +243,10 @@ function LoginForm() {
         </div>
       )}
 
-      {/* Google OAuth */}
       <button
         onClick={handleGoogle}
         style={{
-          width: '100%', padding: '12px 16px', borderRadius: 8, marginBottom: 20,
+          width: '100%', padding: '12px 16px', borderRadius: 8, marginBottom: 8,
           border: '1px solid var(--border)', background: 'var(--surface-alt)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
           fontFamily: 'var(--font-montserrat)', fontSize: 13, fontWeight: 600,
@@ -140,8 +258,17 @@ function LoginForm() {
         <GoogleIcon />
         Continue with Google
       </button>
+      {isLocalSupabase && (
+        <p style={{
+          fontFamily: 'var(--font-montserrat)', fontSize: 11, color: 'var(--text-tertiary)',
+          margin: '0 0 16px', lineHeight: 1.5,
+        }}>
+          Local Supabase Google is not configured (`supabase/.env` client ID/secret are empty).
+          Use the email code below, or point `.env.local` at the hosted project.
+        </p>
+      )}
+      {!isLocalSupabase && <div style={{ marginBottom: 12 }} />}
 
-      {/* Divider */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         <span style={{ fontFamily: 'var(--font-montserrat)', fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.5px' }}>
@@ -150,8 +277,7 @@ function LoginForm() {
         <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
       </div>
 
-      {/* Magic link form */}
-      <form onSubmit={handleMagicLink}>
+      <form onSubmit={handleSendOtp}>
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>EMAIL ADDRESS</label>
           <input
@@ -179,7 +305,7 @@ function LoginForm() {
             opacity: status === 'sending' ? 0.6 : 1,
           }}
         >
-          {status === 'sending' ? 'Sending…' : 'Send me a sign-in link'}
+          {status === 'sending' ? 'Sending…' : 'Email me a code'}
         </button>
       </form>
 

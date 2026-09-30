@@ -4,6 +4,16 @@ import { useRef, useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import {
+  autoSeatByGroup,
+  parseGuestSide,
+  planVenueSections,
+  sectionForTable,
+  type GuestSide,
+} from '@/lib/seating/auto-seat';
+
+const TABLE_SETTINGS_INFO =
+  'Set how many tables your venue has and seats per table. The room splits into a Bride section and a Groom section. Within each section, groups sit together (neighboring tables if needed). Drag to fine-tune.';
 
 interface Rsvp {
   id: string;
@@ -20,6 +30,7 @@ interface Invite {
   status: string;
   table_number: number | null;
   group_name?: string | null;
+  side?: GuestSide | null;
   token: string;
   email: string | null;
   phone: string | null;
@@ -32,6 +43,7 @@ interface Props {
   initialInvites: Invite[];
   initialMealOptions: string[];
   initialMealEnabled: boolean;
+  initialTogetherSets?: string[][];
 }
 
 type TabKey = 'guests' | 'meals';
@@ -48,7 +60,7 @@ const STATUS_ORDER: Record<string, number> = { responded: 0, pending: 1, decline
 /** Quick-pick group labels; any other string is allowed as a custom group. */
 const GROUP_PRESETS = ['Family', 'Friends', 'High school'] as const;
 
-type IconName = 'plus' | 'check' | 'x' | 'upload' | 'drag' | 'arrow' | 'search' | 'mail' | 'chev' | 'more' | 'trash' | 'edit' | 'link' | 'download' | 'send' | 'phone';
+type IconName = 'plus' | 'check' | 'x' | 'upload' | 'drag' | 'arrow' | 'search' | 'mail' | 'chev' | 'more' | 'trash' | 'edit' | 'link' | 'download' | 'send' | 'phone' | 'info' | 'settings';
 
 function Icon({ name, size = 16, stroke = 1.5, color = 'currentColor' }: { name: IconName; size?: number; stroke?: number; color?: string }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -68,6 +80,8 @@ function Icon({ name, size = 16, stroke = 1.5, color = 'currentColor' }: { name:
     download:<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     send:    <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
     phone:   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>,
+    info:    <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>,
+    settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -77,7 +91,14 @@ function Icon({ name, size = 16, stroke = 1.5, color = 'currentColor' }: { name:
   );
 }
 
-export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMealOptions, initialMealEnabled }: Props) {
+export function GuestTableV2({
+  weddingId,
+  weddingSlug,
+  initialInvites,
+  initialMealOptions,
+  initialMealEnabled,
+  initialTogetherSets = [],
+}: Props) {
   const [activeTab, setActiveTab]   = useState<TabKey>('guests');
   const [invites, setInvites]       = useState<Invite[]>(initialInvites);
   const [search, setSearch]         = useState('');
@@ -112,6 +133,17 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     const maxAssigned = Math.max(0, ...initialInvites.map((i) => i.table_number ?? 0));
     return Math.max(3, maxAssigned);
   });
+  const [tableCapacity, setTableCapacity] = useState(8);
+  const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
+  const [draftTableCount, setDraftTableCount] = useState(3);
+  const [draftTableCapacity, setDraftTableCapacity] = useState(8);
+  const [autoSeatSettingsOpen, setAutoSeatSettingsOpen] = useState(false);
+  const [togetherSets, setTogetherSets] = useState<string[][]>(initialTogetherSets);
+  const [draftTogetherSets, setDraftTogetherSets] = useState<string[][]>(initialTogetherSets);
+  const [draftPickGroups, setDraftPickGroups] = useState<Set<string>>(new Set());
+  const [savingAutoSeatSettings, setSavingAutoSeatSettings] = useState(false);
+  const [clearingSeats, setClearingSeats] = useState(false);
+  const [autoSeating, setAutoSeating] = useState(false);
 
   const csvRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -154,6 +186,21 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     }
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [invites]);
+
+  const venueSections = useMemo(
+    () => planVenueSections(
+      invites.map((inv) => ({
+        id: inv.id,
+        seats: inv.max_guests,
+        tableNumber: inv.table_number,
+        groupName: inv.group_name ?? null,
+        side: inv.side ?? null,
+      })),
+      tableCount,
+      tableCapacity,
+    ),
+    [invites, tableCount, tableCapacity],
+  );
 
   const filtered = invites.filter((inv) => {
     if (!inv.guest_name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -264,11 +311,20 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     const emailIdx = hasHeader ? findIdx('email') : 2;
     const phoneIdx = hasHeader ? findIdx('phone', 'mobile') : 3;
     const tableIdx = hasHeader ? findIdx('table') : 4;
-    const groupIdx = hasHeader ? findIdx('group', 'tag', 'side') : 5;
+    const sideIdx  = hasHeader ? findIdx('side') : 5;
+    const groupIdx = hasHeader ? findIdx('group', 'tag') : 6;
 
     const rows = hasHeader ? lines.slice(1) : lines;
 
-    const guests: { name: string; seats: number; email: string | null; phone: string | null; table: number | null; group: string | null }[] = [];
+    const guests: {
+      name: string;
+      seats: number;
+      email: string | null;
+      phone: string | null;
+      table: number | null;
+      side: GuestSide | null;
+      group: string | null;
+    }[] = [];
     for (const row of rows) {
       const cols = splitCsv(row);
       const name = nameIdx >= 0 ? cols[nameIdx] : cols[0];
@@ -276,13 +332,18 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
       const seatsRaw = seatsIdx >= 0 ? cols[seatsIdx] : '';
       const tableRaw = tableIdx >= 0 ? cols[tableIdx] : '';
       const tableNum = tableRaw ? parseInt(tableRaw.replace(/[^0-9]/g, ''), 10) : NaN;
+      const sideRaw = sideIdx >= 0 ? (cols[sideIdx] || '') : '';
       const groupRaw = groupIdx >= 0 ? (cols[groupIdx] || '').trim() : '';
+      const side = parseGuestSide(sideRaw);
+      // Side is required — skip rows that don't have Bride/Groom when a Side column exists
+      if (sideIdx >= 0 && !side) continue;
       guests.push({
         name,
         seats: Math.min(Math.max(parseInt(seatsRaw) || 1, 1), 10),
         email: emailIdx >= 0 ? (cols[emailIdx] || null) : null,
         phone: phoneIdx >= 0 ? (cols[phoneIdx] || null) : null,
         table: Number.isFinite(tableNum) && tableNum > 0 ? tableNum : null,
+        side,
         group: groupRaw || null,
       });
     }
@@ -298,6 +359,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
           email: g.email,
           phone: g.phone,
           table_number: g.table,
+          side: g.side,
           group_name: g.group,
         })
         .select('*, rsvps(*)')
@@ -314,18 +376,18 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const row = (cols: string[]) => cols.map((c) => (c === '' ? '' : esc(c))).join(',');
     const csv = [
-      row(['Guest Name', 'Seats', 'Email', 'Phone', 'Table', 'Group', 'Notes (ignored on import)']),
+      row(['Guest Name', 'Seats', 'Email', 'Phone', 'Table', 'Side', 'Group', 'Notes (ignored on import)']),
       row([
-        '', '', '', '', '', '',
-        'Fill one row per invite. Guest Name required. Seats = party size (1–10). Email/Phone optional. Table = optional table # (leave blank to Auto-seat). Group = Family, Friends, High school, or any custom name — same Group sits together. Replace the two example rows with your guests.',
+        '', '', '', '', '', '', '',
+        'Fill one row per invite. Guest Name required. Side required: Bride or Groom. Seats = party size (1–10). Email/Phone optional. Table optional. Group optional (Family, Friends, High school, or custom). Replace the two example rows with your guests.',
       ]),
       row([
-        'The Johnson Family', '4', 'johnson@email.com', '07700 900001', '', 'Family',
-        'Example: household of 4 in Family group, no table yet',
+        'The Johnson Family', '4', 'johnson@email.com', '07700 900001', '', 'Bride', 'Family',
+        'Example: Bride side, Family group',
       ]),
       row([
-        'Sarah & Tom', '2', 'sarah@email.com', '', '', 'Friends',
-        'Example: couple in Friends group — use any Group name you like',
+        'Sarah & Tom', '2', 'sarah@email.com', '', '', 'Groom', 'Friends',
+        'Example: Groom side, Friends group',
       ]),
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -347,7 +409,14 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     if (detailInvite?.id === id) setDetailInvite((d) => d ? { ...d, guest_name: trimmed } : d);
   }
 
-  async function saveDetail(id: string, fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null; group_name: string | null }) {
+  async function saveDetail(id: string, fields: {
+    guest_name: string;
+    max_guests: number;
+    email: string | null;
+    phone: string | null;
+    side: GuestSide;
+    group_name: string | null;
+  }) {
     await supabase.from('invites').update(fields).eq('id', id);
     setInvites((prev) => prev.map((inv) => inv.id === id ? { ...inv, ...fields } : inv));
     setDetailInvite(null);
@@ -368,6 +437,185 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
     setInvites((prev) => prev.map((inv) => ids.includes(inv.id) ? { ...inv, table_number: tableNumber } : inv));
     await supabase.from('invites').update({ table_number: tableNumber }).in('id', ids);
     showToast(`Moved ${ids.length} guests to ${tableNumber == null ? 'Unassigned' : `Table ${tableNumber}`}`);
+  }
+
+  function openTableSettings() {
+    setDraftTableCount(tableCount);
+    setDraftTableCapacity(tableCapacity);
+    setTableSettingsOpen(true);
+  }
+
+  async function clearSeating(reason?: string) {
+    const seatedCount = invites.filter((inv) => inv.table_number != null).length;
+    if (seatedCount === 0) {
+      showToast('No seated guests to return');
+      return 0;
+    }
+    setClearingSeats(true);
+    setInvites((prev) => prev.map((inv) => (
+      inv.table_number == null ? inv : { ...inv, table_number: null }
+    )));
+    await Promise.all([
+      supabase
+        .from('invites')
+        .update({ table_number: null, table_name: null })
+        .eq('wedding_id', weddingId)
+        .not('table_number', 'is', null),
+      supabase
+        .from('rsvps')
+        .update({ table_number: null, table_name: null })
+        .eq('wedding_id', weddingId)
+        .not('table_number', 'is', null),
+    ]);
+    setClearingSeats(false);
+    showToast(
+      reason
+        ?? `Moved ${seatedCount} guest${seatedCount === 1 ? '' : 's'} back to Unassigned`,
+    );
+    return seatedCount;
+  }
+
+  async function saveTableSettings() {
+    const nextCount = Math.max(1, Math.min(200, draftTableCount));
+    const nextCapacity = Math.max(1, Math.min(50, draftTableCapacity));
+    const settingsChanged = nextCount !== tableCount || nextCapacity !== tableCapacity;
+    const seatedCount = invites.filter((inv) => inv.table_number != null).length;
+
+    setTableCount(nextCount);
+    setTableCapacity(nextCapacity);
+    setTableSettingsOpen(false);
+
+    if (settingsChanged && seatedCount > 0) {
+      await clearSeating(
+        `${nextCount} tables · ${nextCapacity} seats each · ${seatedCount} guest${seatedCount === 1 ? '' : 's'} moved to Unassigned`,
+      );
+      return;
+    }
+
+    showToast(`${nextCount} tables · ${nextCapacity} seats each (${nextCount * nextCapacity} total)`);
+  }
+
+  function openAutoSeatSettings() {
+    setDraftTogetherSets(togetherSets.map((set) => [...set]));
+    setDraftPickGroups(new Set());
+    setAutoSeatSettingsOpen(true);
+  }
+
+  function toggleDraftPickGroup(name: string) {
+    setDraftPickGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function addTogetherSetFromPick() {
+    const picked = [...draftPickGroups].sort((a, b) => a.localeCompare(b));
+    if (picked.length < 2) {
+      showToast('Pick at least two groups that can sit together');
+      return;
+    }
+    setDraftTogetherSets((prev) => {
+      const key = picked.map((g) => g.toLowerCase()).sort().join('|');
+      const exists = prev.some(
+        (set) => [...set].map((g) => g.toLowerCase()).sort().join('|') === key,
+      );
+      if (exists) return prev;
+      return [...prev, picked];
+    });
+    setDraftPickGroups(new Set());
+  }
+
+  function removeTogetherSet(idx: number) {
+    setDraftTogetherSets((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function saveAutoSeatSettings() {
+    setSavingAutoSeatSettings(true);
+    const { data: wedding } = await supabase
+      .from('weddings')
+      .select('settings')
+      .eq('id', weddingId)
+      .single();
+    const current = (wedding?.settings as Record<string, unknown>) ?? {};
+    const { error } = await supabase
+      .from('weddings')
+      .update({
+        settings: {
+          ...current,
+          auto_seat_together_sets: draftTogetherSets,
+        },
+      })
+      .eq('id', weddingId);
+    setSavingAutoSeatSettings(false);
+    if (error) {
+      showToast(`Could not save: ${error.message}`);
+      return;
+    }
+    setTogetherSets(draftTogetherSets.map((set) => [...set]));
+    setAutoSeatSettingsOpen(false);
+    showToast(
+      draftTogetherSets.length === 0
+        ? 'Auto-seat settings saved — each group sits alone'
+        : `Auto-seat settings saved · ${draftTogetherSets.length} together set${draftTogetherSets.length === 1 ? '' : 's'}`,
+    );
+  }
+
+  async function handleAutoSeat() {
+    if (autoSeating) return;
+    const unseated = invites.filter((inv) => inv.table_number == null);
+    if (unseated.length === 0) {
+      showToast('All guests are already seated — return them to Unassigned to shuffle');
+      return;
+    }
+
+    setAutoSeating(true);
+    const result = autoSeatByGroup(
+      invites.map((inv) => ({
+        id: inv.id,
+        seats: inv.max_guests,
+        tableNumber: inv.table_number,
+        groupName: inv.group_name ?? null,
+        side: inv.side ?? null,
+      })),
+      tableCount,
+      tableCapacity,
+      { togetherSets },
+    );
+
+    if (result.assignments.size === 0) {
+      showToast('No free seats — open Table settings to add tables or seats');
+      setAutoSeating(false);
+      return;
+    }
+
+    const updates = [...result.assignments.entries()];
+    setInvites((prev) =>
+      prev.map((inv) => {
+        const table = result.assignments.get(inv.id);
+        return table == null ? inv : { ...inv, table_number: table };
+      }),
+    );
+    await Promise.all(
+      updates.map(([id, table]) =>
+        supabase.from('invites').update({ table_number: table }).eq('id', id),
+      ),
+    );
+
+    const splitNote = result.groupsSplit > 0
+      ? ` · ${result.groupsSplit} group${result.groupsSplit === 1 ? '' : 's'} split`
+      : '';
+    const unplacedNote = result.unplacedIds.length > 0
+      ? ` · ${result.unplacedIds.length} left unseated`
+      : '';
+    const brideRange = result.sections.brideTables;
+    const groomRange = result.sections.groomTables;
+    const sectionNote = brideRange.length && groomRange.length
+      ? ` · Bride tables ${brideRange[0]}–${brideRange[brideRange.length - 1]}, Groom ${groomRange[0]}–${groomRange[groomRange.length - 1]}`
+      : '';
+    showToast(`Seated ${result.seatedSeats} guest${result.seatedSeats === 1 ? '' : 's'}${splitNote}${unplacedNote}${sectionNote}`);
+    setAutoSeating(false);
   }
 
   function toggleSelect(id: string) {
@@ -831,25 +1079,88 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
         <div>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 12,
+            marginBottom: 12, gap: 8, flexWrap: 'wrap',
           }}>
             <div style={{
               fontSize: 10, fontWeight: 700, letterSpacing: 1.5,
               color: '#8B7355', textTransform: 'uppercase',
             }}>Tables</div>
-            <button
-              onClick={() => setTableCount((n) => n + 1)}
-              style={{
-                fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 500,
-                color: '#6B6560', background: 'transparent',
-                border: '1px solid rgba(212,207,198,0.7)',
-                borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <Icon name="plus" size={11}/> Add table
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleAutoSeat}
+                disabled={autoSeating}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 600,
+                  color: '#F5F0E8', background: '#2C3A2E',
+                  border: 'none',
+                  borderRadius: 8, padding: '6px 12px',
+                  cursor: autoSeating ? 'wait' : 'pointer',
+                  opacity: autoSeating ? 0.7 : 1,
+                }}
+              >
+                {autoSeating ? 'Seating…' : 'Auto-seat by group'}
+              </button>
+              <button
+                type="button"
+                onClick={openAutoSeatSettings}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 500,
+                  color: '#6B6560', background: 'transparent',
+                  border: '1px solid rgba(212,207,198,0.7)',
+                  borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <Icon name="settings" size={11}/> Auto-seat settings
+              </button>
+              <button
+                type="button"
+                onClick={() => clearSeating()}
+                disabled={clearingSeats || assigned.length === 0}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 500,
+                  color: assigned.length === 0 ? '#B8B0A4' : '#6B6560',
+                  background: 'transparent',
+                  border: '1px solid rgba(212,207,198,0.7)',
+                  borderRadius: 8, padding: '5px 10px',
+                  cursor: assigned.length === 0 || clearingSeats ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {clearingSeats ? 'Returning…' : 'Return to Unassigned'}
+              </button>
+              <button
+                type="button"
+                onClick={openTableSettings}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 500,
+                  color: '#6B6560', background: 'transparent',
+                  border: '1px solid rgba(212,207,198,0.7)',
+                  borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <Icon name="settings" size={11}/> Table settings
+              </button>
+            </div>
           </div>
+          <p style={{
+            fontFamily: 'var(--font-montserrat)', fontSize: 11, color: '#9E9890',
+            margin: '0 0 12px', lineHeight: 1.45,
+          }}>
+            {tableCount} tables · {tableCapacity} seats each · {tableCount * tableCapacity} venue seats
+            {togetherSets.length > 0 ? ` · ${togetherSets.length} together set${togetherSets.length === 1 ? '' : 's'}` : ''}
+            <br />
+            {venueSections.brideTables.length > 0 && (
+              <>Bride section: tables {venueSections.brideTables[0]}–{venueSections.brideTables[venueSections.brideTables.length - 1]}</>
+            )}
+            {venueSections.brideTables.length > 0 && venueSections.groomTables.length > 0 ? ' · ' : ''}
+            {venueSections.groomTables.length > 0 && (
+              <>Groom section: tables {venueSections.groomTables[0]}–{venueSections.groomTables[venueSections.groomTables.length - 1]}</>
+            )}
+            <br />
+            Within each section, groups sit together · Auto-seat settings lets groups share tables · Return to Unassigned to reshuffle
+          </p>
 
           <div style={{
             display: 'grid',
@@ -858,7 +1169,30 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
           }}>
             {tableNumbers.map((tn) => {
               const seated = assigned.filter((inv) => inv.table_number === tn);
+              const section = sectionForTable(tn, venueSections);
+              const tableSides = [...new Set(
+                seated
+                  .map((inv) => inv.side)
+                  .filter((s): s is GuestSide => s === 'bride' || s === 'groom'),
+              )].sort();
+              const tableGroups = [...new Set(
+                seated
+                  .map((inv) => inv.group_name?.trim())
+                  .filter((g): g is string => Boolean(g)),
+              )].sort((a, b) => a.localeCompare(b));
+              const tableTags = [
+                ...(section ? [section === 'bride' ? 'Bride section' : 'Groom section'] : []),
+                ...tableSides
+                  .filter((s) => !section || s !== section)
+                  .map((s) => (s === 'bride' ? 'Bride' : 'Groom')),
+                ...tableGroups,
+              ];
               const isHover = hoverTarget === tn;
+              const sectionTint = section === 'bride'
+                ? 'rgba(107,79,107,0.04)'
+                : section === 'groom'
+                  ? 'rgba(58,74,107,0.04)'
+                  : '#FAF7F1';
               return (
                 <div
                   key={tn}
@@ -867,8 +1201,14 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
                   onDragLeave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setHoverTarget(null); }}
                   onDrop={(e) => onZoneDrop(e, tn)}
                   style={{
-                    background: isHover ? 'rgba(44,58,46,0.04)' : '#FAF7F1',
-                    border: isHover ? '2px dashed #2C3A2E' : '1px solid rgba(212,207,198,0.5)',
+                    background: isHover ? 'rgba(44,58,46,0.04)' : sectionTint,
+                    border: isHover
+                      ? '2px dashed #2C3A2E'
+                      : section === 'bride'
+                        ? '1px solid rgba(107,79,107,0.22)'
+                        : section === 'groom'
+                          ? '1px solid rgba(58,74,107,0.22)'
+                          : '1px solid rgba(212,207,198,0.5)',
                     borderRadius: 12,
                     padding: 14,
                     minHeight: 180,
@@ -877,7 +1217,7 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
                 >
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginBottom: 10, gap: 8,
+                    marginBottom: tableTags.length > 0 ? 6 : 10, gap: 8,
                   }}>
                     <div style={{
                       fontFamily: 'var(--font-yeseva)', fontStyle: 'italic',
@@ -900,6 +1240,34 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
                       )}
                     </div>
                   </div>
+                  {tableTags.length > 0 && (
+                    <div style={{
+                      display: 'flex', flexWrap: 'wrap', gap: 4,
+                      marginBottom: 10,
+                    }}>
+                      {tableTags.map((tag) => {
+                        const isSide = tag === 'Bride' || tag === 'Groom';
+                        return (
+                          <span
+                            key={tag}
+                            style={{
+                              fontFamily: 'var(--font-montserrat)', fontSize: 10, fontWeight: 600,
+                              color: isSide ? (tag === 'Bride' ? '#6B4F6B' : '#3A4A6B') : '#2C3A2E',
+                              background: isSide
+                                ? (tag === 'Bride' ? 'rgba(107,79,107,0.10)' : 'rgba(58,74,107,0.10)')
+                                : 'rgba(44,58,46,0.08)',
+                              border: isSide
+                                ? `1px solid ${tag === 'Bride' ? 'rgba(107,79,107,0.22)' : 'rgba(58,74,107,0.22)'}`
+                                : '1px solid rgba(44,58,46,0.12)',
+                              borderRadius: 6, padding: '2px 8px',
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {seated.map((inv) => (
                       <GuestRowCard
@@ -1081,6 +1449,366 @@ export function GuestTableV2({ weddingId, weddingSlug, initialInvites, initialMe
 
             <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(212,207,198,0.5)', display: 'flex', justifyContent: 'flex-end' }}>
               <Button size="sm" variant="secondary" onClick={() => setSendModalOpen(false)}>Done</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Table Settings Modal ─────────────────────────────────────────── */}
+      {tableSettingsOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1100, padding: 20,
+          }}
+          onClick={() => setTableSettingsOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#F5F0E8', border: '1px solid rgba(212,207,198,0.7)', borderRadius: 14,
+              padding: 0, maxWidth: 400, width: '100%',
+            }}
+          >
+            <div style={{
+              padding: '20px 24px', borderBottom: '1px solid rgba(212,207,198,0.5)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h3 style={{ fontFamily: 'var(--font-yeseva)', fontStyle: 'italic', fontSize: 22, color: '#2C2C2C', margin: 0 }}>
+                  Table settings
+                </h3>
+                <span
+                  tabIndex={0}
+                  aria-label={TABLE_SETTINGS_INFO}
+                  style={{ position: 'relative', display: 'inline-flex', color: '#9E9890', cursor: 'help' }}
+                  className="table-settings-info"
+                >
+                  <Icon name="info" size={16} />
+                  <span
+                    role="tooltip"
+                    style={{
+                      position: 'absolute', left: '50%', bottom: 'calc(100% + 8px)',
+                      transform: 'translateX(-50%)',
+                      width: 240, padding: '10px 12px', borderRadius: 8,
+                      background: '#2C2C2C', color: '#F5F0E8',
+                      fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 500,
+                      lineHeight: 1.45, textAlign: 'left',
+                      opacity: 0, pointerEvents: 'none',
+                      transition: 'opacity 0.15s ease',
+                      zIndex: 2,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    }}
+                    className="table-settings-tooltip"
+                  >
+                    {TABLE_SETTINGS_INFO}
+                  </span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTableSettingsOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9E9890' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <label style={{
+                  display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11,
+                  fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8,
+                }}>
+                  TABLES AT VENUE
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setDraftTableCount((n) => Math.max(1, n - 1))}
+                    style={stepBtn}
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={draftTableCount}
+                    onChange={(e) => setDraftTableCount(Math.max(1, Math.min(200, parseInt(e.target.value, 10) || 1)))}
+                    style={{
+                      width: 72, textAlign: 'center',
+                      fontFamily: 'var(--font-montserrat)', fontSize: 18, fontWeight: 600,
+                      color: '#2C2C2C', background: '#FFFFFF',
+                      border: '1px solid rgba(212,207,198,0.7)', borderRadius: 8,
+                      padding: '8px 6px', outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDraftTableCount((n) => Math.min(200, n + 1))}
+                    style={stepBtn}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11,
+                  fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8,
+                }}>
+                  SEATS PER TABLE
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setDraftTableCapacity((n) => Math.max(1, n - 1))}
+                    style={stepBtn}
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={draftTableCapacity}
+                    onChange={(e) => setDraftTableCapacity(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1)))}
+                    style={{
+                      width: 72, textAlign: 'center',
+                      fontFamily: 'var(--font-montserrat)', fontSize: 18, fontWeight: 600,
+                      color: '#2C2C2C', background: '#FFFFFF',
+                      border: '1px solid rgba(212,207,198,0.7)', borderRadius: 8,
+                      padding: '8px 6px', outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDraftTableCapacity((n) => Math.min(50, n + 1))}
+                    style={stepBtn}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <p style={{
+                fontFamily: 'var(--font-montserrat)', fontSize: 12, color: '#6B6560',
+                margin: 0, padding: '12px 14px', borderRadius: 8,
+                background: '#FFFFFF', border: '1px solid rgba(212,207,198,0.5)',
+              }}>
+                Total venue seats:{' '}
+                <strong style={{ color: '#2C3A2E' }}>
+                  {draftTableCount * draftTableCapacity}
+                </strong>
+              </p>
+              <p style={{
+                fontFamily: 'var(--font-montserrat)', fontSize: 11, color: '#9E9890',
+                margin: 0, lineHeight: 1.45,
+              }}>
+                Changing these settings moves seated guests back to Unassigned so you can Auto-seat again.
+                Guests must be Bride or Groom; same group sits together. Drag to fine-tune after.
+              </p>
+            </div>
+
+            <div style={{
+              padding: '16px 24px', borderTop: '1px solid rgba(212,207,198,0.5)',
+              display: 'flex', gap: 10, justifyContent: 'flex-end',
+            }}>
+              <button
+                type="button"
+                onClick={() => setTableSettingsOpen(false)}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 13, color: '#6B6560',
+                  background: 'none', border: '1px solid rgba(212,207,198,0.7)',
+                  borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <Button size="sm" onClick={saveTableSettings}>Save</Button>
+            </div>
+          </div>
+          <style>{`
+            .table-settings-info:hover .table-settings-tooltip,
+            .table-settings-info:focus-visible .table-settings-tooltip {
+              opacity: 1 !important;
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* ── Auto-seat Settings Modal ─────────────────────────────────────── */}
+      {autoSeatSettingsOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1100, padding: 20,
+          }}
+          onClick={() => setAutoSeatSettingsOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#F5F0E8', border: '1px solid rgba(212,207,198,0.7)', borderRadius: 14,
+              maxWidth: 480, width: '100%', maxHeight: '85vh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '20px 24px', borderBottom: '1px solid rgba(212,207,198,0.5)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+            }}>
+              <h3 style={{ fontFamily: 'var(--font-yeseva)', fontStyle: 'italic', fontSize: 22, color: '#2C2C2C', margin: 0 }}>
+                Auto-seat settings
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAutoSeatSettingsOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9E9890' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <p style={{
+                fontFamily: 'var(--font-montserrat)', fontSize: 12, color: '#6B6560',
+                margin: 0, lineHeight: 1.5,
+              }}>
+                The venue is split into a Bride section and a Groom section (like two sides of the room).
+                Choose which groups can share tables within the same section — they never cross the aisle.
+                Groups not listed below only sit with their own group.
+              </p>
+
+              {groupNames.length === 0 ? (
+                <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 13, color: '#9E9890', margin: 0 }}>
+                  Add group tags to guests first (Family, Friends, High school…), then come back here.
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <label style={{
+                      display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11,
+                      fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8,
+                    }}>
+                      PICK GROUPS THAT CAN SIT TOGETHER
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                      {groupNames.map((g) => {
+                        const selected = draftPickGroups.has(g);
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => toggleDraftPickGroup(g)}
+                            style={{
+                              padding: '6px 12px', borderRadius: 8,
+                              border: selected ? '1px solid #2C3A2E' : '1px solid rgba(212,207,198,0.7)',
+                              background: selected ? 'rgba(44,58,46,0.10)' : '#FFFFFF',
+                              color: selected ? '#2C3A2E' : '#6B6560',
+                              fontFamily: 'var(--font-montserrat)', fontSize: 12,
+                              fontWeight: selected ? 600 : 500, cursor: 'pointer',
+                            }}
+                          >
+                            {g}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addTogetherSetFromPick}
+                      disabled={draftPickGroups.size < 2}
+                      style={{
+                        fontFamily: 'var(--font-montserrat)', fontSize: 12, fontWeight: 600,
+                        color: draftPickGroups.size < 2 ? '#9E9890' : '#F5F0E8',
+                        background: draftPickGroups.size < 2 ? 'rgba(212,207,198,0.5)' : '#2C3A2E',
+                        border: 'none', borderRadius: 8, padding: '8px 14px',
+                        cursor: draftPickGroups.size < 2 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Allow selected to sit together
+                    </button>
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11,
+                      fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8,
+                    }}>
+                      TOGETHER SETS
+                    </label>
+                    {draftTogetherSets.length === 0 ? (
+                      <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 12, color: '#9E9890', margin: 0 }}>
+                        None yet — each group sits only with itself.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {draftTogetherSets.map((set, idx) => (
+                          <div
+                            key={`${set.join('|')}-${idx}`}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              background: '#FFFFFF', border: '1px solid rgba(212,207,198,0.5)',
+                              borderRadius: 8, padding: '10px 12px',
+                            }}
+                          >
+                            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {set.map((g) => (
+                                <span
+                                  key={g}
+                                  style={{
+                                    fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 600,
+                                    color: '#2C3A2E', background: 'rgba(44,58,46,0.08)',
+                                    borderRadius: 6, padding: '2px 8px',
+                                  }}
+                                >
+                                  {g}
+                                </span>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeTogetherSet(idx)}
+                              title="Remove set"
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: '#9E9890', display: 'flex', padding: 2,
+                              }}
+                            >
+                              <Icon name="x" size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={{
+              padding: '16px 24px', borderTop: '1px solid rgba(212,207,198,0.5)',
+              display: 'flex', gap: 10, justifyContent: 'flex-end',
+            }}>
+              <button
+                type="button"
+                onClick={() => setAutoSeatSettingsOpen(false)}
+                style={{
+                  fontFamily: 'var(--font-montserrat)', fontSize: 13, color: '#6B6560',
+                  background: 'none', border: '1px solid rgba(212,207,198,0.7)',
+                  borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <Button size="sm" loading={savingAutoSeatSettings} onClick={saveAutoSeatSettings}>
+                Save
+              </Button>
             </div>
           </div>
         </div>
@@ -1282,8 +2010,9 @@ function GuestRowCard({
             <span style={{
               fontFamily: 'var(--font-montserrat)', fontSize: 10, color: '#9E9890',
             }}>
-              {invite.group_name?.trim() ? `${invite.group_name.trim()} · ` : ''}
-              {attendingCount}/{invite.max_guests} attending
+              {invite.side === 'bride' ? 'Bride' : invite.side === 'groom' ? 'Groom' : 'No side'}
+              {invite.group_name?.trim() ? ` · ${invite.group_name.trim()}` : ''}
+              {' · '}{attendingCount}/{invite.max_guests} attending
               {invite.email && ' · ✉'}
               {invite.phone && ' · ☎'}
             </span>
@@ -1390,7 +2119,14 @@ function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobil
   appUrl: string;
   weddingSlug: string;
   isMobile: boolean;
-  onSave: (fields: { guest_name: string; max_guests: number; email: string | null; phone: string | null; group_name: string | null }) => Promise<void>;
+  onSave: (fields: {
+    guest_name: string;
+    max_guests: number;
+    email: string | null;
+    phone: string | null;
+    side: GuestSide;
+    group_name: string | null;
+  }) => Promise<void>;
   onDelete: () => void;
   onCopyLink: () => void;
   onClose: () => void;
@@ -1399,6 +2135,7 @@ function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobil
   const [seats, setSeats] = useState(invite.max_guests);
   const [email, setEmail] = useState(invite.email ?? '');
   const [phone, setPhone] = useState(invite.phone ?? '');
+  const [side, setSide]   = useState<GuestSide | null>(invite.side ?? null);
   const [group, setGroup] = useState(invite.group_name ?? '');
   const [saving, setSaving] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
@@ -1435,12 +2172,17 @@ function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobil
 
   async function handleSave() {
     if (!name.trim()) return;
+    if (side !== 'bride' && side !== 'groom') {
+      alert('Please choose Bride or Groom side.');
+      return;
+    }
     setSaving(true);
     await onSave({
       guest_name: name.trim(),
       max_guests: seats,
       email: email || null,
       phone: phone || null,
+      side,
       group_name: group.trim() || null,
     });
     setSaving(false);
@@ -1482,7 +2224,47 @@ function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobil
             </div>
             <div>
               <label style={{ display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8 }}>
-                GROUP
+                SIDE (required)
+              </label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                {([
+                  { value: 'bride' as const, label: 'Bride' },
+                  { value: 'groom' as const, label: 'Groom' },
+                ]).map(({ value, label }) => {
+                  const selected = side === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSide(value)}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: 8,
+                        border: selected
+                          ? `1.5px solid ${value === 'bride' ? '#6B4F6B' : '#3A4A6B'}`
+                          : '1px solid rgba(212,207,198,0.7)',
+                        background: selected
+                          ? (value === 'bride' ? 'rgba(107,79,107,0.12)' : 'rgba(58,74,107,0.12)')
+                          : '#FFFFFF',
+                        color: selected
+                          ? (value === 'bride' ? '#6B4F6B' : '#3A4A6B')
+                          : '#6B6560',
+                        fontFamily: 'var(--font-montserrat)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 11, color: '#9E9890', margin: '0 0 14px' }}>
+                Every guest must be Bride or Groom side.
+              </p>
+
+              <label style={{ display: 'block', fontFamily: 'var(--font-montserrat)', fontSize: 11, fontWeight: 600, letterSpacing: '0.5px', color: '#6B6560', marginBottom: 8 }}>
+                GROUP (optional)
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                 {groupSuggestions.map((g) => {
@@ -1515,7 +2297,7 @@ function GuestDetailPanel({ invite, existingGroups, appUrl, weddingSlug, isMobil
                 placeholder="Or type a custom group name…"
               />
               <p style={{ fontFamily: 'var(--font-montserrat)', fontSize: 11, color: '#9E9890', margin: '6px 0 0' }}>
-                Guests with the same group are seated together by Auto-seat.
+                Optional — same group on a side sits together at the same or neighboring tables.
               </p>
             </div>
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" />
